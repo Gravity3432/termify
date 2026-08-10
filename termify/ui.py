@@ -469,10 +469,42 @@ def render_nav(app, x0: int, y0: int, height: int) -> Panel:
             out.append(f" ❯ [{num}] {label}\n", style=f"bold black on {accent}")
         else:
             out.append(f"   [{num}] {label}\n", style="grey70")
-    out.append("\n")
-    out.append(" DEVICE\n", style="bold grey50")
-    out.append("─" * 20 + "\n", style="grey27")
-    out.append(" " + truncate("♪ " + app.snap.device_label, 19) + "\n", style=theme_color(theme, t, light=0.5))
+    # ---- collapsible playlist drawer (stays on Home; [ opens it)
+    if getattr(app, "side_drawer", False):
+        pls = app.rows.get("playlists", [])
+        out.append("\n PLAYLISTS ▾\n", style=f"bold {theme_color(theme, t, light=0.6)}")
+        out.append("─" * 20 + "\n", style="grey27")
+        avail = max(3, height - 22)          # rows we can show in the drawer
+        if not pls and app.loading.get("playlists"):
+            out.append(" loading…\n", style="grey50")
+        elif not pls:
+            out.append(" (none yet)\n", style="grey35")
+        else:
+            sc = app._drawer_scroll
+            if app.drawer_sel < sc:
+                sc = app.drawer_sel
+            if app.drawer_sel >= sc + avail:
+                sc = app.drawer_sel - avail + 1
+            sc = max(0, min(sc, max(0, len(pls) - avail)))
+            app._drawer_scroll = sc
+            for k in range(sc, min(len(pls), sc + avail)):
+                pl = pls[k]
+                app.add_zone(x0 + 1, y0 + 13 + k - sc, 20, 1,
+                             type="drawer", index=k)
+                if k == app.drawer_sel:
+                    accent = theme_color(theme, t, light=0.55)
+                    out.append(f" ❯ {truncate(pl.name, 18).ljust(18)}\n",
+                               style=f"bold black on {accent}")
+                else:
+                    out.append(f"   {truncate(pl.name, 18)}\n", style="grey70")
+            if len(pls) > sc + avail:
+                out.append(f"   …{len(pls) - sc - avail} more\n", style="grey35")
+        out.append(" [esc] close · [enter] play\n", style="grey37")
+    else:
+        out.append("\n")
+        out.append(" DEVICE\n", style="bold grey50")
+        out.append("─" * 20 + "\n", style="grey27")
+        out.append(" " + truncate("♪ " + app.snap.device_label, 19) + "\n", style=theme_color(theme, t, light=0.5))
     if app.snap.device_label and app.engine.mode == "remote":
         out.append(" press [6] to switch\n", style="grey37")
     return Panel(out, box=box.ROUNDED, border_style="grey27", padding=(0, 1))
@@ -509,7 +541,8 @@ def render_home(app, width: int, height: int, x0: int, y0: int) -> Panel:
     inner_w = width - 4
     inner_h = height - 2
 
-    art_w = max(16, min(30, (inner_w * 2) // 5))
+    # bigger art = higher visible resolution; cap generous when there's room
+    art_w = max(16, min(40, (inner_w * 3) // 5))
     if inner_w - art_w - 2 < 18:
         art_w = max(12, inner_w - 20)
     art_h = max(9, min(art_w // 2, inner_h - 10))
@@ -634,7 +667,7 @@ def render_track_list(app, kind: str, title: str,
         out.append(" loading…\n", style=theme_color(theme, t, light=0.55 + 0.2 * math.sin(t * 5)))
     elif not tracks:
         out.append(" (empty)\n", style="grey42")
-    by_date = app.sort_label(kind) == "date added"
+    by_date = app.sort_label(kind) in ("oldest added", "newest added")
     for i in range(scroll, min(len(tracks), scroll + rows_avail)):
         app.add_zone(x0, y0 + 2 + (i - scroll), width - 2, 1,
                      type="select", view=kind, index=i)
@@ -1056,8 +1089,8 @@ HELP_LINES = [
     ("lyrics",  "L or [8] = full lyrics view (lrclib sync; genius.com text fallback)"),
     ("library", "5 = recently played + your top tracks & top artists"),
     ("search",  "/ type — returns artists, albums, playlists & tracks"),
-    ("sort",    "o cycles: default → date added → title → artist → album → duration"),
-    ("playlist", "enter opens · 'a' plays whole thing · 'x' reloads"),
+    ("sort",    "o cycles: default → oldest added → newest added → title → artist → album → duration"),
+    ("playlist", "enter opens · 'a' plays whole thing · 'x' reloads · [ = sidebar playlist drawer (stays on Home)"),
     ("edit",    "C create playlist · A add track to playlist · d remove from open one · F find duplicates"),
     ("queue",   "u or 7 = full queue view · enter/click jumps · d kicks out · N = play next · E = queue at end"),
     ("sleep",   "Z cycles the sleep timer 15→30→45→60 min→off (pauses for you)"),

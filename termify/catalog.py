@@ -30,8 +30,9 @@ def track_from_api(item: dict, liked: bool = False) -> Optional[Track]:
     images = album.get("images") or []
     image_url = None
     if images:
-        mid = images[1] if len(images) > 1 else images[0]
-        image_url = mid.get("url")
+        # Spotify returns sizes largest-first; grab the highest-res cover so
+        # the art has the most detail to work with when we render it.
+        image_url = images[0].get("url")
     # The wrapper carries the 'added on' timestamp for playlist/library
     # entries: e.g. {'added_at': '2021-05-04T12:00:00Z', 'item': {...}}.
     added_at = item.get("added_at") if isinstance(item, dict) else None

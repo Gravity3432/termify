@@ -34,8 +34,8 @@ fun to look at.
 - 🎤 **Karaoke lyrics** — a dedicated lyrics view (press `L` or `[8]`) with
   synced lines from LRCLib and a Genius fallback.
 - 🔘 **Keyboard media buttons** — your keyboard's play/pause / next / prev keys
-  control Termify, even when the terminal isn't focused (needs the optional
-  `keyboard` package).
+  control Termify **even when the terminal isn't focused**. On Windows this uses
+  a native low-level hook (no admin, no extra package).
 - 📊 **Listening stats** — press `S` for a stats panel with your *"week in
   music"* report (minutes, top tracks/artists, day streak) — stored privately
   on your machine.
@@ -116,11 +116,12 @@ bottom of the screen.
 | `r` | Repeat (off → context → track) |
 | `l` | Like / unlike current song |
 | `/` | Search |
-| `o` | Sort list (default → date added → title → artist → album → duration) |
+| `o` | Sort list (default → oldest added → newest added → title → artist → album → duration) |
 | `S` | Listening stats + "your week in music" report |
 | `N` / `E` | Queue selected track to play next / at the end |
 | `F` | Find duplicate songs in the current playlist / liked |
 | `L` / `8` | Open the lyrics view |
+| `[` | Sidebar playlist drawer (browse/play playlists while staying on Home) |
 | `1`–`8` | Jump to view |
 | 🎵 media keys | play/pause, next, prev on your keyboard (global, optional) |
 | `u` | Queue |

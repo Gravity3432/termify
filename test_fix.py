@@ -76,10 +76,10 @@ print("PASS empty lists are safe")
 
 # ---- 5. date-added sort key used by the app ---------------------------
 src = open(os.path.join(_parent, "termify", "app.py"), encoding="utf-8").read()
-assert '"date added"' in src, "app.py SORT_MODES missing date added"
+assert '"oldest added"' in src and '"newest added"' in src, "app.py SORT_MODES missing date sorts"
 m = re.search(r"SORT_MODES\s*=\s*\[(.*?)\]", src, re.S)
 modes = m.group(1)
-assert "date added" in modes
+assert "oldest added" in modes and "newest added" in modes
 key = lambda t: t.added_at or ""
 a = Track(id="a", uri="u", name="A", artists="", album="", duration_ms=1,
           added_at="2021-05-04T00:00:00Z")

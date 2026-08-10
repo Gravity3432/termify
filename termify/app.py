@@ -39,7 +39,8 @@ VIEW_ORDER = ["home", "search", "playlists", "liked", "library", "devices", "que
 # Spotify-style sort cycle for track lists (None = original order)
 SORT_MODES = [
     ("default", None),
-    ("date added", lambda t: t.added_at or ""),
+    ("oldest added", lambda t: t.added_at or ""),
+    ("newest added", lambda t: t.added_at or "", True),
     ("title", lambda t: (t.name or "").lower()),
     ("artist", lambda t: (t.artists or "").lower()),
     ("album", lambda t: (t.album or "").lower()),
@@ -106,6 +107,10 @@ class App:
         self.live_bands = None
         self._dupes_active = False
         self._dupes_orig = []
+        # sidebar playlist drawer (open a playlist list without leaving Home)
+        self.side_drawer = False
+        self.drawer_sel = 0
+        self._drawer_scroll = 0
 
         # global keyboard media-button hook (optional, non-fatal)
         self.media_keys = MediaKeyController()
@@ -454,6 +459,12 @@ class App:
                     if same and now - getattr(self, "_picker_click_t", 0.0) < 0.45:
                         self._picker_add()  # double-click adds
                     self._picker_click_t = now
+            elif kind == "drawer":
+                i = z["index"]
+                rows = self.rows.get("playlists", [])
+                if i < len(rows):
+                    self.drawer_sel = i
+                    self._drawer_play(rows[i])  # click a playlist = play it
             elif kind == "select":
                 self._click_select(z)
             return
@@ -524,8 +535,13 @@ class App:
         if orig is None:
             return
         idx = self.sort_idx[kind] % len(SORT_MODES)
-        _name, key = SORT_MODES[idx]
-        self.rows[kind] = list(orig) if key is None else sorted(orig, key=key)
+        entry = SORT_MODES[idx]
+        name, key = entry[0], entry[1]
+        rev = entry[2] if len(entry) > 2 else False
+        if key is None:
+            self.rows[kind] = list(orig)
+        else:
+            self.rows[kind] = sorted(orig, key=key, reverse=rev)
         self.clamp_sel(kind)
 
     def cycle_sort(self) -> None:
@@ -609,7 +625,30 @@ class App:
         if self.show_lyrics and ch in (K_ESC, "L", "?") :
             self.show_lyrics = False
             return
+        # ---- sidebar playlist drawer
+        if self.side_drawer:
+            if ch == "[":
+                self.side_drawer = False
+                return
+            if ch in (K_ESC, "q"):
+                self.side_drawer = False
+                return
+            rows = self.rows.get("playlists", [])
+            n = len(rows)
+            if ch in (K_DOWN, "j"):
+                self.drawer_sel = min(max(0, n - 1), self.drawer_sel + 1)
+                return
+            if ch in (K_UP, "k"):
+                self.drawer_sel = max(0, self.drawer_sel - 1)
+                return
+            if ch in ("\r", "\n", K_ENTER) and rows:
+                self._drawer_play(rows[self.drawer_sel])
+                return
+            # let media/transport keys still work while the drawer is open
         # ---- global
+        if ch == "[":
+            self._toggle_drawer()
+            return
         if ch in (K_CTRL_C, "q"):
             self.quit()
             return
@@ -909,6 +948,23 @@ class App:
             self.toast("your engine can't edit the queue here")
             return
         self._call(lambda: qf(tr, to_end))
+
+    def _toggle_drawer(self) -> None:
+        if self.side_drawer:
+            self.side_drawer = False
+            return
+        # make sure the playlist list is warm before showing it
+        self.ensure_view("playlists")
+        self.side_drawer = True
+        self.drawer_sel = 0
+        self._drawer_scroll = 0
+        self.toast("sidebar playlists: ↑↓ to pick · enter to play · [ to close", 5)
+
+    def _drawer_play(self, pl) -> None:
+        """Play a playlist from the sidebar drawer without leaving Home."""
+        self.side_drawer = False
+        self.toast(f"playing playlist: {pl.name}…")
+        self._call(lambda: self.engine.play_playlist(pl))
 
     def _toggle_duplicates(self) -> None:
         """F: fold the current track list down to just the duplicate songs."""
