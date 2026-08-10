@@ -1,0 +1,1257 @@
+from __future__ import annotations
+
+import colorsys
+import math
+import random
+import time as _time
+from typing import List, Optional, Tuple
+
+from rich import box
+from rich.align import Align
+from rich.layout import Layout
+from rich.panel import Panel
+from rich.text import Text
+
+from .lyrics import current_index as lyric_index
+from .models import Snapshot, Track
+
+# ------------------------------------------------------------------ themes
+# (base hue, hue span to sweep through, sweep period in seconds)
+THEMES = {
+    "aurora": (130, 150, 26.0),
+    "sunset": (350, 65, 20.0),
+    "ocean": (170, 75, 22.0),
+    "candy": (275, 70, 17.0),
+    "vampire": (330, 40, 15.0),  # night-violet draining into blood red
+    "mono": (158, 0, 9999.0),
+}
+
+BIG_LOGO = [
+    "████████╗███████╗██████╗ ███╗   ███╗██╗███████╗██╗   ██╗",
+    "╚══██╔══╝██╔════╝██╔══██╗████╗ ████║██║██╔════╝╚██╗ ██╔╝",
+    "   ██║   █████╗  ██████╔╝██╔████╔██║██║█████╗   ╚████╔╝ ",
+    "   ██║   ██╔══╝  ██╔══██╗██║╚██╔╝██║██║██╔══╝    ╚██╔╝  ",
+    "   ██║   ███████╗██║  ██║██║ ╚═╝ ██║██║██║        ██║   ",
+    "   ╚═╝   ╚══════╝╚═╝  ╚═╝╚═╝     ╚═╝╚═╝╚═╝        ╚═╝   ",
+]
+# dripping-blood letters (classic "Bloody" figlet face) for vampire mode
+BIG_LOGO_BLOODY = [
+    line.rstrip()
+    for line in (
+        "▄▄▄█████▓▓█████  ██▀███   ███▄ ▄███▓ ██▓  █████▒▓██   ██▓",
+        "▓  ██▒ ▓▒▓█   ▀ ▓██ ▒ ██▒▓██▒▀█▀ ██▒▓██▒▓██   ▒  ▒██  ██▒",
+        "▒ ▓██░ ▒░▒███   ▓██ ░▄█ ▒▓██    ▓██░▒██▒▒████ ░   ▒██ ██░",
+        "░ ▓██▓ ░ ▒▓█  ▄ ▒██▀▀█▄  ▒██    ▒██ ░██░░▓█▒  ░   ░ ▐██▓░",
+        "  ▒██▒ ░ ░▒████▒░██▓ ▒██▒▒██▒   ░██▒░██░░▒█░      ░ ██▒▓░",
+        "  ▒ ░░   ░░ ▒░ ░░ ▒▓ ░▒▓░░ ▒░   ░  ░░▓   ▒ ░       ██▒▒▒ ",
+        "    ░     ░ ░  ░  ░▒ ░ ▒░░  ░      ░ ▒ ░ ░       ▓██ ░▒░ ",
+        "  ░         ░     ░░   ░ ░      ░    ▒ ░ ░ ░     ▒ ▒ ░░  ",
+        "            ░  ░   ░            ░    ░           ░ ░     ",
+        "                                                 ░ ░     ",
+    )
+]
+
+TAGLINE = "spotify · zero bloat · pure terminal"
+VAMPIRE_TAGLINE = "🦇 dine in the dark · zero bloat · pure terminal"
+
+
+def banner_for(theme: str) -> List[str]:
+    return BIG_LOGO_BLOODY if theme == "vampire" else BIG_LOGO
+
+
+# ------------------------------------------------------------------ boot splash
+SPLASH_ART = [line.rstrip() for line in (
+    "     ██╗████████╗███╗   ███╗██████╗ ",
+    "     ██║╚══██╔══╝████╗ ████║██╔══██╗",
+    "     ██║   ██║   ██╔████╔██║██████╔╝",
+    "██   ██║   ██║   ██║╚██╔╝██║██╔══██╗",
+    "╚█████╔╝   ██║   ██║ ╚═╝ ██║██████╔╝",
+    " ╚════╝    ╚═╝   ╚═╝     ╚═╝╚═════╝ ",
+)]
+
+SPLASH_ART_BLOODY = [line.rstrip() for line in (
+    " ▄▄▄██▀▀▀▄▄▄█████▓ ███▄ ▄███▓ ▄▄▄▄   ",
+    "   ▒██   ▓  ██▒ ▓▒▓██▒▀█▀ ██▒▓█████▄ ",
+    "   ░██   ▒ ▓██░ ▒░▓██    ▓██░▒██▒ ▄██",
+    "▓██▄██▓  ░ ▓██▓ ░ ▒██    ▒██ ▒██░█▀  ",
+    " ▓███▒     ▒██▒ ░ ▒██▒   ░██▒░▓█  ▀█▓",
+    " ▒▓▒▒░     ▒ ░░   ░ ▒░   ░  ░░▒▓███▀▒",
+    " ▒ ░▒░       ░    ░  ░      ░▒░▒   ░ ",
+    " ░ ░ ░     ░      ░      ░    ░    ░ ",
+    " ░   ░                   ░    ░      ",
+    "                                     ",
+)]
+SPLASH_SUB = "J O H N · T H E · M A I L · B O Y"
+SPLASH_BY = "made with ♥ by @johnthemailboy"
+SPLASH_GLYPHS = "▓▒░╳¤#%§¶*+=~^ΞΔ"
+
+
+def _cheap_hash(*nums) -> int:
+    h = 0
+    for n in nums:
+        h = (h * 131 + int(n)) & 0x7FFFFFFF
+    return h
+
+
+def render_splash(app, width: int, height: int, t: Optional[float] = None) -> Panel:
+    """Boot sequence: neon rain + JTMB letters scrambling into focus,
+    then his name types itself underneath. Any key skips it."""
+    theme = app.theme
+    t = app.boot_t() if t is None else t
+    W = max(40, width - 4)
+    H = max(16, height - 4)
+    art = SPLASH_ART_BLOODY if theme == "vampire" else SPLASH_ART
+    art = [l.ljust(max(len(x) for x in art)) for l in art]
+    art_h, art_w = len(art), len(art[0])
+    tick = int(t * 12)
+
+    top = max(0, (H - art_h - 6) // 2)
+    x0 = max(0, (W - art_w) // 2)
+    sub_y = top + art_h + 2
+    by_y = sub_y + 2
+
+    rows = []  # each row: list of [char, style] cells we can overwrite
+    for y in range(H):
+        line = []
+        for x in range(W):
+            ch, style = " ", ""
+            # neon rain backdrop: each column has a fixed offset/tail; only
+            # the head's position moves over time.
+            hh = _cheap_hash(x, 17)
+            span = H * 2
+            head = (tick * 7 + hh % span) % span
+            drop = head - y
+            if 0 <= drop <= 5 and (hh // 13) % 3 == 0:
+                g = SPLASH_GLYPHS[_cheap_hash(x, y, tick) % len(SPLASH_GLYPHS)]
+                light = max(0.05, 0.30 - drop * 0.05)
+                ch, style = g, theme_color(theme, t, phase=x * 0.05,
+                                           light=light, sat=0.7)
+            line.append([ch, style])
+        rows.append(line)
+
+    # the letters: every cell has a "birth moment"; before it we show cycling
+    # glitch glyphs, at it we flash white, after it the real char.
+    for ly, art_line in enumerate(art):
+        row = rows[top + ly] if 0 <= top + ly < len(rows) else None
+        if row is None:
+            break
+        for lx, ch in enumerate(art_line):
+            x = x0 + lx
+            if ch == " " or x >= W:
+                continue
+            birth = 0.15 + 1.5 * (lx / art_w) + _cheap_hash(lx, ly) % 40 / 100.0
+            fade = t - birth
+            if fade < 0:
+                row[x] = [" ", ""]
+            elif fade < 0.45:
+                g = SPLASH_GLYPHS[_cheap_hash(lx, ly, tick) % len(SPLASH_GLYPHS)]
+                row[x] = [g, theme_color(theme, t, phase=lx * 0.1, light=0.55)]
+            else:
+                light = 0.78 if fade < 0.8 else 0.66 - 0.09 * math.sin(t * 2.2)
+                row[x] = [ch, theme_color(theme, t, phase=lx * 0.09,
+                                          light=light, sat=0.88)]
+
+    # typewriter subline
+    if t > 0.9 and 0 <= sub_y < H:
+        typed = int((t - 0.9) * 24)
+        text = SPLASH_SUB[: max(0, min(typed, len(SPLASH_SUB)))]
+        cursor = "▌" if typed < len(SPLASH_SUB) else ""
+        start = max(0, (W - len(SPLASH_SUB)) // 2)
+        for i, c in enumerate(text + cursor):
+            if start + i < W:
+                rows[sub_y][start + i] = [
+                    c, "bold grey90" if c != "▌"
+                    else theme_color(theme, t, light=0.65)]
+    # the credit line (cool kids sign their work)
+    if t > 2.0 and 0 <= by_y < H:
+        start = max(0, (W - len(SPLASH_BY)) // 2)
+        light = 0.45 + 0.15 * math.sin(t * 3.0)
+        for i, c in enumerate(SPLASH_BY):
+            if start + i < W:
+                rows[by_y][start + i] = [
+                    c, theme_color(theme, t, phase=i * 0.2, light=light)]
+    if t > 2.4 and H - 2 >= 0:
+        hint = "[ press any key ]"
+        if int(t * 2.5) % 2 == 0:
+            base = max(0, W - len(hint) - 1)
+            for i, c in enumerate(hint):
+                if base + i < W:
+                    rows[H - 2][base + i] = [c, "grey37"]
+        brand = "♪ TERMIFY"
+        for i, c in enumerate(brand):
+            if i < W:
+                rows[H - 2][i] = [c, theme_color(theme, t, phase=i * 0.4,
+                                                 light=0.5)]
+
+    body = Text()
+    for i, line in enumerate(rows):
+        if i:
+            body.append("\n")
+        for ch, style in line:
+            body.append(ch, style=style)
+    return Panel(body, box=box.ROUNDED,
+                 border_style=theme_color(theme, t, light=0.30),
+                 padding=(0, 0))
+
+KEY_LEGEND = " space · n/b skip · u queue · l like · ? all keys · q quit"
+
+
+def theme_params(name: str):
+    return THEMES.get(name, THEMES["aurora"])
+
+
+def theme_color(theme: str, t: float, phase: float = 0.0,
+                light: float = 0.62, sat: float = 0.80) -> str:
+    base, span, period = theme_params(theme)
+    if span == 0:
+        hue = base
+    else:
+        w = 0.5 + 0.5 * math.sin(2 * math.pi * (t / period) + phase)
+        hue = base + span * w
+    r, g, b = colorsys.hls_to_rgb((hue % 360) / 360.0, light, sat)
+    return f"#{int(r * 255):02x}{int(g * 255):02x}{int(b * 255):02x}"
+
+
+def gradient_text(s: str, theme: str, t: float, step: float = 0.23,
+                  light: float = 0.62, bold: bool = True) -> Text:
+    out = Text()
+    for i, ch in enumerate(s):
+        style = theme_color(theme, t, phase=i * step, light=light)
+        out.append(ch, style=("bold " if bold else "") + style)
+    return out
+
+
+def gradient_lines(lines: List[str], theme: str, t: float) -> Text:
+    out = Text()
+    for li, line in enumerate(lines):
+        for i, ch in enumerate(line):
+            out.append(
+                ch, style=theme_color(theme, t, phase=i * 0.10 + li * 0.55)
+            )
+        out.append("\n")
+    return out
+
+
+# ------------------------------------------------------------------ widgets
+
+def bar(width: int, ratio: float, theme: str, t: float,
+        tail: bool = True, pulse: bool = True) -> Text:
+    """A horizontal progress/volume bar with a travelling gradient."""
+    width = max(4, width)
+    ratio = max(0.0, min(1.0, ratio))
+    filled = int(round(width * ratio))
+    head = filled - 1
+    out = Text()
+    for i in range(width):
+        if i < filled:
+            l = 0.66 if (pulse and i == head and 0.5 + 0.5 * math.sin(t * 6) > 0.5) else 0.52
+            out.append("█", style=theme_color(theme, t, phase=i * 0.12, light=l, sat=0.85))
+        elif tail:
+            out.append("░", style="grey23")
+    return out
+
+
+def marquee(s: str, width: int, t: float, speed: float = 3.0) -> str:
+    if len(s) <= width or width <= 6:
+        return s.ljust(width)
+    gap = 6
+    span = len(s) + gap
+    off = int(t * speed) % span
+    buf = (s + " " * gap + s + " " * gap)
+    return buf[off : off + width]
+
+
+def visualizer(seed: str, cols: int, rows: int, t: float,
+               playing: bool, theme: str,
+               bands: Optional[List[float]] = None) -> Text:
+    """Spectrum bars - driven by the REAL audio FFT when bands are given
+    (stream mode), otherwise clock vibes (remote mode has no local audio)."""
+    cols = max(6, cols)
+    rows = max(2, rows)
+    out = Text()
+    levels = []
+    if bands:
+        n = len(bands)
+        for c in range(cols):
+            v = bands[min(n - 1, int(c * n / cols))]
+            if not playing:
+                v *= 0.25
+            levels.append(int(round(max(0.02, min(1.0, v)) * rows)))
+    else:
+        rng = random.Random(seed or "termify")
+        col_cfg = [(rng.uniform(0.7, 2.6), rng.uniform(0, 6.28), rng.uniform(0.45, 1.0))
+                   for _ in range(cols)]
+        for speed, phase, amp in col_cfg:
+            v = amp * (0.62 + 0.38 * math.sin(t * speed + phase))
+            v += 0.22 * math.sin(t * speed * 2.33 + phase * 2)
+            if not playing:
+                v *= 0.22 + 0.08 * math.sin(t * 0.8 + phase)
+            v = max(0.02, min(1.0, v))
+            levels.append(int(round(v * rows)))
+    for r in range(rows, 0, -1):
+        line = Text()
+        for c_i, lvl in enumerate(levels):
+            if lvl >= r:
+                depth = r / rows
+                line.append(
+                    "█",
+                    style=theme_color(theme, t, phase=c_i * 0.30 + depth * 2.2,
+                                      light=0.45 + 0.25 * depth, sat=0.85),
+                )
+            else:
+                line.append(" ", style="")
+        out.append_text(line)
+        out.append("\n")
+    return out
+
+
+def truncate(s: str, width: int) -> str:
+    if width <= 1:
+        return ""
+    return s if len(s) <= width else s[: width - 1] + "…"
+
+
+def dur_text(ms: int) -> str:
+    total = max(0, ms // 1000)
+    return f"{total // 60}:{total % 60:02d}"
+
+
+def window(app, kind: str, avail: int, count: int) -> int:
+    """Keep the selection inside the visible window; returns scroll offset."""
+    sel = max(0, min(app.sel[kind], max(0, count - 1)))
+    app.sel[kind] = sel
+    sc = app.scroll[kind]
+    if sel < sc:
+        sc = sel
+    elif sel >= sc + avail:
+        sc = sel - avail + 1
+    sc = max(0, min(sc, max(0, count - avail)))
+    app.scroll[kind] = sc
+    return sc
+
+
+# ------------------------------------------------------------------ rows
+
+def track_row(track: Track, idx: int, selected: bool, width: int,
+              theme: str, t: float, date_col: bool = False) -> Text:
+    heart = "♥" if track.liked else " "
+    dur = track.duration_text
+    num = f"{idx + 1:>3}"
+    fixed = 3 + 1 + 1 + 1 + len(dur) + 2 + 3  # num+heart+spaces+dur+seps
+    avail = max(10, width - fixed)
+    title_w = max(12, int(avail * 0.48))
+    artist_w = max(8, int(avail * 0.30))
+    album_w = max(0, avail - title_w - artist_w - 2)
+
+    out = Text()
+    caret = "❯" if selected else " "
+    title_part = truncate(track.name, title_w).ljust(title_w)
+    artist_part = truncate(track.artists, artist_w).ljust(artist_w)
+    # When sorting by date added, show the date in the album slot.
+    meta = track.date_text if date_col else track.album
+    album_part = truncate(meta, album_w).ljust(album_w) if album_w >= 6 else ""
+    if selected:
+        accent = theme_color(theme, t, light=0.55)
+        out.append(f"{caret} ", style=f"bold black on {accent}")
+        body = f"{num} {heart} {title_part} {artist_part} {album_part}{dur}"
+        out.append(body.ljust(width - 2), style=f"bold black on {accent}")
+    else:
+        out.append(f"{caret} ", style="grey30")
+        out.append(f"{num} ", style="grey35")
+        out.append(f"{heart} ", style=theme_color(theme, t, phase=idx * 0.4) if track.liked else "grey27")
+        out.append(title_part, style="white")
+        out.append(" ", style="")
+        out.append(artist_part, style="grey62")
+        if album_part:
+            out.append(" ", style="")
+            out.append(album_part, style="grey42")
+            out.append(" ", style="")
+        out.append(dur, style="grey58")
+    return out
+
+
+def playlist_row(pl, idx: int, selected: bool, width: int, theme: str, t: float) -> Text:
+    count = f"{pl.count} tracks"
+    out = Text()
+    caret = "❯" if selected else " "
+    num = f"{idx + 1:>3}"
+    name_w = max(10, width - 3 - 2 - len(count) - 2 - len(pl.owner) - 3)
+    if selected:
+        accent = theme_color(theme, t, light=0.55)
+        body = f"{num} {truncate(pl.name, name_w).ljust(name_w)}  {pl.owner:<10.10} {count}"
+        out.append(f"{caret} ", style=f"bold black on {accent}")
+        out.append(body.ljust(width - 2), style=f"bold black on {accent}")
+    else:
+        out.append(f"{caret} ", style="grey30")
+        out.append(f"{num} ", style="grey35")
+        out.append(truncate(pl.name, name_w).ljust(name_w), style="white")
+        out.append("  ", style="")
+        out.append(f"{pl.owner:<10.10}"[:10], style="grey50")
+        out.append(" " + count, style="grey58")
+    return out
+
+
+def device_row(dev: dict, idx: int, selected: bool, active: bool, width: int,
+               theme: str, t: float) -> Text:
+    name = dev.get("name", "?")
+    dtype = dev.get("type", "")
+    out = Text()
+    caret = "❯" if selected else " "
+    dot = "●" if active else "○"
+    body = f"{dot} {name}  ({dtype})"
+    if selected:
+        accent = theme_color(theme, t, light=0.55)
+        out.append(f"{caret} ", style=f"bold black on {accent}")
+        out.append(truncate(body, width - 4).ljust(width - 2), style=f"bold black on {accent}")
+    else:
+        out.append(f"{caret} ", style="grey30")
+        out.append(truncate(body, width - 4), style="white" if active else "grey62")
+    return out
+
+
+# ------------------------------------------------------------------ pieces
+
+def render_header(app, width: int, big: bool) -> Panel:
+    theme, t = app.theme, app.t()
+    tagline = VAMPIRE_TAGLINE if theme == "vampire" else TAGLINE
+    if big:
+        logo = gradient_lines(banner_for(theme), theme, t)
+        right = Text()
+        right.append("\n")
+        if theme == "vampire":
+            right.append("\n\n")  # taller banner - keep the side block centered
+        right.append("  ♪ " + app.engine.me_name + "\n", style="bold white")
+        right.append("  " + tagline + "\n", style="grey42")
+        right.append("  by ", style="grey42")
+        right.append("@johnthemailboy\n", style=f"bold {theme_color(theme, t, phase=1.7)}")
+        right.append("  mode ", style="grey42")
+        right.append(app.engine.mode, style=theme_color(theme, t, phase=1.1))
+        right.append("  ·  theme ", style="grey42")
+        right.append(theme, style=theme_color(theme, t, phase=2.3))
+        from rich.columns import Columns
+
+        content = Columns([logo, right], expand=True, padding=(0, 2))
+    else:
+        title = gradient_text(" ♪ T E R M I F Y ♪ ", theme, t, step=0.35)
+        title.append(f"   {tagline}", style="grey42")
+        content = title
+    return Panel(content, box=box.ROUNDED,
+                 border_style=theme_color(theme, t, light=0.40),
+                 padding=(0, 1))
+
+
+def render_nav(app, x0: int, y0: int, height: int) -> Panel:
+    theme, t = app.theme, app.t()
+    items = [
+        ("home", "1", "Home"),
+        ("search", "2", "Search"),
+        ("playlists", "3", "Playlists"),
+        ("liked", "4", "Liked ♥"),
+        ("library", "5", "Library"),
+        ("devices", "6", "Devices"),
+        ("queue", "7", "Queue ♫"),
+    ]
+    out = Text()
+    out.append(" NAVIGATE\n", style="bold grey50")
+    out.append("─" * 20 + "\n", style="grey27")
+    active = {
+        "playlist_tracks": "playlists",
+        "artist": "search",
+        "album": "search",
+    }.get(app.view, app.view)
+    for i, (key, num, label) in enumerate(items):
+        sel = active == key
+        app.add_zone(x0 + 1, y0 + 2 + i, 20, 1, type="nav", view=key)
+        if sel:
+            accent = theme_color(theme, t, light=0.55)
+            out.append(f" ❯ [{num}] {label}\n", style=f"bold black on {accent}")
+        else:
+            out.append(f"   [{num}] {label}\n", style="grey70")
+    out.append("\n")
+    out.append(" DEVICE\n", style="bold grey50")
+    out.append("─" * 20 + "\n", style="grey27")
+    out.append(" " + truncate("♪ " + app.snap.device_label, 19) + "\n", style=theme_color(theme, t, light=0.5))
+    if app.snap.device_label and app.engine.mode == "remote":
+        out.append(" press [6] to switch\n", style="grey37")
+    return Panel(out, box=box.ROUNDED, border_style="grey27", padding=(0, 1))
+
+
+def status_pip(app) -> Text:
+    snap = app.snap
+    theme, t = app.theme, app.t()
+    out = Text()
+    if snap.status == "buffering":
+        frames = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
+        f = frames[int(t * 10) % len(frames)]
+        out.append(f" {f} buffering… ", style=theme_color(theme, t, light=0.6))
+    elif snap.playing:
+        out.append(" ▶ playing ", style=theme_color(theme, t, light=0.55))
+    elif snap.status == "paused":
+        out.append(" ❚❚ paused ", style="grey62")
+    elif snap.status == "error":
+        out.append(" ⚠ error ", style="bold #ff5555")
+    else:
+        out.append(" ◼ idle ", style="grey50")
+    if getattr(app, "sleep_end", None):
+        left = max(0, int((app.sleep_end - _time.monotonic()) / 60))
+        out.append(f" 😴{left}m", style="grey62")
+    return out
+
+
+def render_home(app, width: int, height: int, x0: int, y0: int) -> Panel:
+    from rich.columns import Columns
+    from rich.console import Group
+
+    theme, t = app.theme, app.t()
+    snap: Snapshot = app.snap
+    inner_w = width - 4
+    inner_h = height - 2
+
+    art_w = max(16, min(30, (inner_w * 2) // 5))
+    if inner_w - art_w - 2 < 18:
+        art_w = max(12, inner_w - 20)
+    art_h = max(9, min(art_w // 2, inner_h - 10))
+    info_w = max(14, inner_w - art_w - 2)
+
+    track = snap.track
+    art_img = app.art_for(track.image_url if track else None, art_w, art_h)
+
+    info = Text()
+    info.append("\n")
+    if track:
+        info.append(marquee(track.name, max(8, info_w - 2), t) + "\n",
+                    style=f"bold {theme_color(theme, t, light=0.70)}")
+        info.append(truncate(track.artists, info_w - 2) + "\n", style="white")
+        info.append(truncate(track.album, info_w - 2) + "\n", style="grey58")
+        info.append("\n")
+        if track.liked:
+            info.append(" ♥ liked ", style=theme_color(theme, t, phase=0.8))
+            info.append("   ", style="")
+        info.append("↻ " + {"off": "off", "context": "all", "track": "one"}[snap.repeat],
+                    style=theme_color(theme, t, light=0.5) if snap.repeat != "off" else "grey37")
+        info.append("   ⇄ " + ("on" if snap.shuffle else "off"),
+                    style=theme_color(theme, t, light=0.5) if snap.shuffle else "grey37")
+        info.append("\n\n")
+        if snap.context_name:
+            info.append(" from ", style="grey42")
+            info.append(truncate(snap.context_name, info_w - 8), style="grey62")
+    else:
+        info.append(" nothing playing\n", style="grey58")
+        info.append("\n browse your playlists or search,\n", style="grey42")
+        info.append(" then hit enter on any track.\n", style="grey42")
+
+    top_cols = Columns([art_img, info], expand=False, padding=(0, 2))
+
+    # the panel content starts with the taller of (art, info); progress after it
+    _plain = info.plain
+    info_h = _plain.count("\n") + (0 if _plain.endswith("\n") else 1)
+    top_h = max(art_h, info_h)
+
+    progress_ratio = (snap.position_ms / snap.duration_ms) if snap.duration_ms else 0.0
+    prog = bar(inner_w, progress_ratio, theme, t)
+    prog_row = top_h + 1
+    app.add_zone(x0, y0 + prog_row, inner_w, 1, type="seek")
+    timing = Text()
+    pre = f" {snap.position_text} "
+    post = f"{snap.duration_text} "
+    hint = "click bar to seek"
+    gap = max(1, inner_w - len(pre) - len(hint) - 3 - len(post))
+    timing.append(pre, style="grey70")
+    timing.append(" " * gap, style="")
+    timing.append(hint, style="grey30")
+    timing.append("   ", style="")
+    timing.append(post, style="grey50")
+
+    # remaining vertical space after art + progress block (blank, prog, timing, blank)
+    remaining = max(0, inner_h - top_h - 4)
+    viz_rows = max(0, min(7, remaining - 2))
+    q_rows = max(0, remaining - viz_rows - 1)
+    if q_rows < 2 and viz_rows > 2:
+        viz_rows -= 2 - q_rows
+        q_rows = max(0, remaining - viz_rows - 1)
+
+    viz = visualizer(track.id if track else "idle", inner_w - 2, max(2, viz_rows),
+                     t, snap.playing, theme,
+                     bands=getattr(app, "live_bands", None))
+
+    q_header_row = prog_row + 3 + max(2, viz_rows)
+    q = Text()
+    sel_home = min(app.sel["home"], max(0, len(snap.queue) - 1))
+    app.sel["home"] = sel_home
+    q.append(" UP NEXT  ", style="bold grey50")
+    q.append("[enter] jump\n", style="grey37")
+    if snap.queue and q_rows > 0:
+        for i, tr in enumerate(snap.queue[:q_rows]):
+            app.add_zone(x0, y0 + q_header_row + 1 + i, inner_w, 1,
+                         type="queue", index=i)
+            line = f" {i + 1:>2} {tr.name} — {tr.artists}"
+            line = truncate(line, inner_w - 3)
+            if i == sel_home:
+                accent = theme_color(theme, t, light=0.55)
+                q.append("❯ " + line.ljust(inner_w - 3) + "\n",
+                         style=f"bold black on {accent}")
+            else:
+                q.append("  " + line + "\n",
+                         style="grey62" if i else theme_color(theme, t, phase=0.4))
+    else:
+        q.append(" (queue empty)\n", style="grey35")
+
+    body = Group(
+        top_cols,
+        Text(""),
+        prog,
+        timing,
+        Text(""),
+        viz,
+        q,
+    )
+    return Panel(body, box=box.ROUNDED, border_style=theme_color(theme, t, light=0.40))
+
+
+def list_title(title: str, count: int, hint: str, theme: str, t: float) -> Text:
+    out = Text()
+    out.append(f" {title} ", style=f"bold {theme_color(theme, t, light=0.6)}")
+    out.append(f" ({count})  ", style="grey50")
+    out.append(truncate(hint, 40), style=theme_color(theme, t, phase=1.0, light=0.45))
+    return out
+
+
+def render_track_list(app, kind: str, title: str,
+                      tracks: List[Track], width: int, height: int,
+                      x0: int, y0: int) -> Panel:
+    theme, t = app.theme, app.t()
+    rows_avail = max(3, height - 5)
+    scroll = window(app, kind, rows_avail, len(tracks))
+    sel = app.sel[kind]
+    sort = app.sort_label(kind)
+    hint = f" [enter] play   [o] sort: {sort if sort else '—'}   [x] reload "
+    out = Text()
+    out.append_text(list_title(title, len(tracks), hint, theme, t))
+    out.append("\n" + "─" * (width - 4) + "\n", style="grey27")
+    if app.loading.get(kind):
+        out.append(" loading…\n", style=theme_color(theme, t, light=0.55 + 0.2 * math.sin(t * 5)))
+    elif not tracks:
+        out.append(" (empty)\n", style="grey42")
+    by_date = app.sort_label(kind) == "date added"
+    for i in range(scroll, min(len(tracks), scroll + rows_avail)):
+        app.add_zone(x0, y0 + 2 + (i - scroll), width - 2, 1,
+                     type="select", view=kind, index=i)
+        out.append_text(
+            track_row(tracks[i], i, i == sel, width - 4, theme, t, by_date)
+        )
+        out.append("\n")
+    return Panel(out, box=box.ROUNDED, border_style=theme_color(theme, t, light=0.40))
+
+
+def render_queue(app, width: int, height: int, x0: int, y0: int) -> Panel:
+    """The full line-up: what's spinning now + every song waiting its turn."""
+    theme, t = app.theme, app.t()
+    snap: Snapshot = app.snap
+    q = snap.queue
+    can_edit = callable(getattr(app.engine, "queue_remove", None))
+    hint = " [enter] jump to it · [d] kick out · [x] reload " if can_edit \
+        else " your up-next line "
+    out = Text()
+    out.append_text(list_title("QUEUE ♫", len(q), hint, theme, t))
+    out.append("\n" + "─" * (width - 4) + "\n", style="grey27")
+
+    tr = snap.track
+    out.append(" NOW PLAYING\n", style="bold grey50")
+    if tr:
+        pip = "▶" if snap.playing else "❚❚"
+        name = f" {pip}  {tr.name} — {tr.artists}"
+        tail = f"{snap.position_text}/{tr.duration_text}"
+        room = max(8, width - 6 - len(tail))
+        line = Text()
+        line.append_text(gradient_text(truncate(name, room).ljust(room),
+                                       theme, t, step=0.14))
+        line.append(" ")
+        line.append(tail, style="grey50")
+        out.append_text(line)
+        out.append("\n")
+    else:
+        out.append(" nothing playing right now\n", style="grey50")
+    out.append("\n")
+    out.append(f" UP NEXT ({len(q)})\n", style="bold grey50")
+
+    before = 7  # title + divider + now-hdr + now-row + blank + upnext-hdr
+    rows_avail = max(2, height - 2 - before)
+    scroll = window(app, "queue", rows_avail, len(q))
+    sel = app.sel["queue"]
+    if not q:
+        msg = (" (the line is empty - start something from playlists/search "
+               "and it builds up here)\n" if tr else " (queue empty)\n")
+        out.append(msg, style="grey35")
+    for i in range(scroll, min(len(q), scroll + rows_avail)):
+        line_y = y0 + out.plain.count("\n")
+        app.add_zone(x0, line_y, width - 2, 1, type="queue", index=i)
+        out.append_text(track_row(q[i], i, i == sel, width - 4, theme, t))
+        out.append("\n")
+    if len(q) > scroll + rows_avail:
+        out.append(f"   … {len(q) - scroll - rows_avail} more below "
+                   "(scroll / PgDn)\n", style="grey35")
+    return Panel(out, box=box.ROUNDED,
+                 border_style=theme_color(theme, t, light=0.40))
+
+
+def _thumb_colors(name: str) -> Tuple[str, str]:
+    """Two deterministic colors per playlist, standing in for cover art."""
+    code = sum((i + 1) * ord(c) for i, c in enumerate(name))
+    hue = code % 360
+    r1, g1, b1 = colorsys.hls_to_rgb(hue / 360.0, 0.58, 0.78)
+    r2, g2, b2 = colorsys.hls_to_rgb(((hue + 30) % 360) / 360.0, 0.36, 0.75)
+    to_hex = lambda c: f"#{int(c[0]*255):02x}{int(c[1]*255):02x}{int(c[2]*255):02x}"
+    return to_hex((r1, g1, b1)), to_hex((r2, g2, b2))
+
+
+def playlist_card(name: str, owner: str, count: int, idx: int,
+                  selected: bool, width: int, theme: str, t: float,
+                  pinned: bool = False) -> Tuple[Text, Text]:
+    """A 2-line playlist row: mini cover on the left, title + who/counts."""
+    top, low = _thumb_colors("liked songs" if pinned else name)
+    caret = "❯" if selected else " "
+    num = f"{idx:>3} " if not pinned else "    "
+    meta = f"{owner} · {count} tracks"
+    a = Text()
+    b = Text()
+    a.append(caret, style=f"bold {theme_color(theme, t, light=0.6)}"
+              if selected else "grey30")
+    b.append(" ", style="")
+    a.append("██" if not pinned else "♥♥", style=top)
+    b.append("██" if not pinned else "╚╝", style=low)
+    a.append(" ")
+    name_w = max(8, width - 4 - 1 - 2 - 1 - 4)
+    if selected:
+        accent = theme_color(theme, t, light=0.55)
+        a.append(num, style=f"bold black on {accent}")
+        a.append(truncate(name, name_w).ljust(name_w),
+                 style=f"bold black on {accent}")
+    else:
+        a.append(num, style="grey45")
+        a.append(truncate(name, name_w).ljust(name_w), style="bold white")
+    b.append("   ")
+    b.append(truncate(meta, max(8, width - 12)), style="grey50")
+    return a, b
+
+
+def render_playlists(app, width: int, height: int, x0: int, y0: int) -> Panel:
+    theme, t = app.theme, app.t()
+    rows = app.rows.get("playlists", [])
+    cards_avail = max(2, (height - 6) // 2)
+    sc_eff = window(app, "playlists", cards_avail, len(rows) + 1)
+    scroll = max(0, sc_eff - 1) if app.sel["playlists"] > 0 else sc_eff
+    sel = app.sel["playlists"]
+    out = Text()
+    out.append_text(list_title(
+        "PLAYLISTS", len(rows) + 1,
+        f"· {sel + 1}/{len(rows) + 1} · [enter] open · [a] play ", theme, t))
+    out.append("\n" + "─" * (width - 4) + "\n", style="grey27")
+    ly = 2
+    if app.loading.get("playlists"):
+        out.append(" loading…\n",
+                   style=theme_color(theme, t, light=0.55 + 0.2 * math.sin(t * 5)))
+    app.add_zone(x0, y0 + ly, width - 2, 2,
+                 type="select", view="playlists", index=0)
+    a, b = playlist_card("Liked Songs", "your collection", "∞", 0,
+                         sel == 0, width - 2, theme, t, pinned=True)
+    out.append_text(a); out.append("\n"); out.append_text(b); out.append("\n")
+    ly += 2
+    for i in range(scroll, min(len(rows), scroll + cards_avail - 1)):
+        pl = rows[i]
+        app.add_zone(x0, y0 + ly, width - 2, 2,
+                     type="select", view="playlists", index=i + 1)
+        a, b = playlist_card(pl.name, f"by {pl.owner or 'spotify'}", pl.count,
+                             i + 1, (i + 1) == sel, width - 2, theme, t)
+        out.append_text(a); out.append("\n"); out.append_text(b); out.append("\n")
+        ly += 2
+    if len(rows) > scroll + cards_avail - 1:
+        out.append(f"   … {len(rows) - scroll - cards_avail + 1} more below "
+                   "(wheel / PgDn)\n", style="grey35")
+    return Panel(out, box=box.ROUNDED, border_style=theme_color(theme, t, light=0.40))
+
+
+def render_devices(app, width: int, height: int, x0: int, y0: int) -> Panel:
+    theme, t = app.theme, app.t()
+    out = Text()
+    devs = app.rows.get("devices", [])
+    out.append_text(list_title("DEVICES", len(devs),
+                               " [enter] use device   [x] rescan ", theme, t))
+    out.append("\n" + "─" * (width - 4) + "\n", style="grey27")
+    if app.engine.mode == "stream":
+        out.append("\n the embedded player is active —\n", style="grey62")
+        out.append(" audio comes straight from this terminal.\n", style="grey42")
+        out.append("\n ♪ " + app.engine.device_label + "\n",
+                   style=theme_color(theme, t, light=0.55))
+    elif app.loading.get("devices"):
+        out.append(" scanning…\n", style=theme_color(theme, t, light=0.55 + 0.2 * math.sin(t * 5)))
+    else:
+        if not devs:
+            out.append("\n no devices seen by Spotify yet.\n", style="grey62")
+            out.append(" open the spotify app / open.spotify.com\n", style="grey42")
+            out.append(" once on any device, then press x.\n", style="grey42")
+        sel = app.sel["devices"]
+        active_id = getattr(app.engine, "_device_id", None)
+        for i, d in enumerate(devs[: max(3, height - 6)]):
+            app.add_zone(x0, y0 + 2 + i, width - 2, 1,
+                         type="select", view="devices", index=i)
+            out.append_text(
+                device_row(d, i, i == sel, d.get("id") == active_id, width - 4, theme, t)
+            )
+            out.append("\n")
+
+    # ---- karaoke lives here too: lyrics under the device box
+    tr = app.snap.track
+    if tr:
+        st = app.lyrics_state
+        synced = st.get("synced") or []
+        plain = st.get("plain") or []
+        out.append("\n ··· 🎤 LYRICS ···\n", style=f"bold {theme_color(theme, t, light=0.55)}")
+        if st.get("loading"):
+            out.append("  looking up lyrics…\n",
+                       style=theme_color(theme, t, light=0.55 + 0.2 * math.sin(t * 5)))
+        elif synced:
+            cur = lyric_index(synced, app.snap.position_ms)
+            lo = max(0, min(cur - 1, len(synced) - 5))
+            for i in range(lo, min(len(synced), lo + 5)):
+                _ms, line = synced[i]
+                if i == cur:
+                    out.append(" ❯ ")
+                    out.append_text(gradient_text(line, theme, t, step=0.10))
+                    out.append("\n")
+                else:
+                    out.append(f"   {line}\n",
+                               style="grey42" if i < cur else "grey58")
+        elif plain:
+            src_note = " · genius.com" if st.get("source") == "genius" else ""
+            for line in plain[:6]:
+                out.append(f"  {line}\n", style="grey62")
+            out.append(f"  (plain text{src_note} - no sync)\n", style="grey37")
+        else:
+            out.append("  no lyrics found for this one\n", style="grey42")
+    return Panel(out, box=box.ROUNDED, border_style=theme_color(theme, t, light=0.40))
+
+
+def render_search(app, width: int, height: int, x0: int, y0: int) -> Panel:
+    """Rich search results: artists / albums / playlists / tracks sections."""
+    theme, t = app.theme, app.t()
+    rows = app.rows.get("search", [])
+    rows_avail = max(3, height - 5)
+    scroll = window(app, "search", rows_avail, len(rows))
+    sel = app.sel["search"]
+    flat = [r for r in rows if r[0] != "section"]
+    out = Text()
+    out.append_text(list_title(
+        f"SEARCH /{app.search_q}" if app.search_q else "SEARCH",
+        len(flat), " [/] new search   [enter] open/play ", theme, t))
+    out.append("\n" + "─" * (width - 4) + "\n", style="grey27")
+    if app.loading.get("search"):
+        out.append(" searching spotify…\n",
+                   style=theme_color(theme, t, light=0.55 + 0.2 * math.sin(t * 5)))
+    elif not rows and app.search_q:
+        out.append(f" no results for '{app.search_q}'\n", style="grey50")
+        out.append(" press / to try another search\n", style="grey37")
+    elif not rows:
+        out.append(" press / and type something - a song, artist, album…\n",
+                   style="grey50")
+    for i in range(scroll, min(len(rows), scroll + rows_avail)):
+        kind, obj = rows[i]
+        if kind == "section":
+            out.append("\n ", style="")
+            out.append(f" {obj} ", style=f"bold {theme_color(theme, t, light=0.62)}")
+            out.append("\n", style="")
+            continue
+        selected = i == sel
+        line_y = y0 + out.plain.count("\n")
+        app.add_zone(x0, line_y, width - 2, 1,
+                     type="select", view="search", index=i)
+        if kind == "track":
+            out.append_text(track_row(obj, i - scroll, selected, width - 4, theme, t))
+        else:
+            if kind == "artist":
+                badge, name, meta = "ARTIST", obj.name, "tap into their top tracks"
+            elif kind == "album":
+                badge, name, meta = "ALBUM ", obj.name, (
+                    f"{obj.artists}" + (f" · {obj.year}" if obj.year else "")
+                )
+            else:  # playlist
+                badge, name, meta = "PLAYLIST", obj.name, (
+                    f"by {obj.owner} · {obj.count} tracks"
+                )
+            caret = "❯" if selected else " "
+            if selected:
+                accent = theme_color(theme, t, light=0.55)
+                body = f"  [{badge}]  {truncate(name, max(10, width - 30))}  {truncate(meta, 28)}"
+                out.append(f"{caret} ", style=f"bold black on {accent}")
+                out.append(body.ljust(width - 4), style=f"bold black on {accent}")
+            else:
+                out.append(f"{caret} ", style="grey30")
+                out.append(f"  [{badge}]  ", style=theme_color(theme, t, phase=i * 0.4, light=0.5))
+                out.append(truncate(name, max(10, width - 30)), style="white")
+                out.append("  " + truncate(meta, 28), style="grey50")
+        out.append("\n")
+    return Panel(out, box=box.ROUNDED, border_style=theme_color(theme, t, light=0.40))
+
+
+def render_lyrics(app, width: int, height: int) -> Panel:
+    """Karaoke panel: synced lyrics follow the playback position."""
+    theme, t = app.theme, app.t()
+    st = app.lyrics_state
+    snap = app.snap
+    tr = snap.track
+    out = Text()
+    src = st.get("source", "")
+    if st.get("synced"):
+        note = "synced via lrclib.net ✓ karaoke"
+    elif src == "genius":
+        note = "via genius.com · plain text (no timestamps for this one)"
+    elif src == "lrclib":
+        note = "via lrclib.net · plain text"
+    else:
+        note = "lrclib.net + genius.com"
+    out.append_text(gradient_text(" LYRICS ", theme, t, step=0.4))
+    out.append(f"   [L / esc] close · {note}", style="grey37")
+    out.append("\n" + "─" * (width - 4) + "\n", style="grey27")
+    if tr:
+        out.append(f" ♪ {tr.name} — {tr.artists}\n\n", style="grey62")
+    if st.get("loading"):
+        out.append(" looking up lyrics…\n",
+                   style=theme_color(theme, t, light=0.55 + 0.2 * math.sin(t * 5)))
+    elif st.get("synced"):
+        synced = st["synced"]
+        cur = lyric_index(synced, snap.position_ms)
+        lo = max(0, min(cur - 3, len(synced) - 8))
+        hi = min(len(synced), lo + 9)
+        for i in range(lo, hi):
+            _ms, line = synced[i]
+            if i == cur:
+                out.append(" ❯ ", style=theme_color(theme, t, light=0.7))
+                out.append_text(gradient_text(line, theme, t, step=0.10))
+                out.append("\n")
+            else:
+                style = "grey42" if i < cur else "grey58"
+                out.append(f"   {line}\n", style=style)
+    elif st.get("plain"):
+        out.append(" (found lyrics, but no timestamps for this one)\n\n", style="grey42")
+        for line in st["plain"][: max(6, height - 8)]:
+            out.append(f"   {line}\n", style="grey62")
+    else:
+        out.append(" no lyrics found for this track ♪\n", style="grey50")
+        out.append(" tip: synced tracks light up karaoke-style as they play\n",
+                   style="grey35")
+    return Panel(out, box=box.ROUNDED,
+                 border_style=theme_color(theme, t, light=0.40))
+
+
+def render_picker(app, width: int, height: int, x0: int, y0: int) -> Panel:
+    """'Add to playlist' chooser."""
+    theme, t = app.theme, app.t()
+    tr = app.picker["track"]
+    rows = app.rows.get("playlists", [])
+    sel = app.picker["sel"]
+    out = Text()
+    out.append_text(gradient_text(" ADD TO PLAYLIST ", theme, t, step=0.4))
+    out.append("\n" + "─" * (width - 4) + "\n", style="grey27")
+    out.append(f" track: {tr.name} — {tr.artists}\n\n", style="grey62")
+    avail = max(3, height - 8)
+    first = max(0, min(sel - avail // 2, max(0, len(rows) - avail)))
+    for i in range(first, min(len(rows), first + avail)):
+        pl = rows[i]
+        app.add_zone(x0 + 1, y0 + 6 + i - first, width - 4, 1,
+                     type="picker", index=i)
+        if i == sel:
+            accent = theme_color(theme, t, light=0.55)
+            out.append(f" ❯ {truncate(pl.name, width - 8)}".ljust(width - 4) + "\n",
+                       style=f"bold black on {accent}")
+        else:
+            out.append(f"   {truncate(pl.name, width - 16)}", style="grey70")
+            out.append(f"  {pl.count}", style="grey37")
+            out.append("\n")
+    if not rows:
+        out.append(" loading your playlists…\n", style="grey50")
+    out.append("\n [enter] add   [esc/q] cancel   (double-click adds · right-click any track opens this)\n",
+               style="grey40")
+    return Panel(out, box=box.ROUNDED,
+                 border_style=theme_color(theme, t, light=0.40))
+
+
+def render_library(app, width: int, height: int, x0: int, y0: int) -> Panel:
+    """Stats & history: recently played, top tracks, top artists."""
+    theme, t = app.theme, app.t()
+    rows = app.rows.get("library", [])
+    rows_avail = max(3, height - 5)
+    scroll = window(app, "library", rows_avail, len(rows))
+    sel = app.sel["library"]
+    flat = [r for r in rows if r[0] != "section"]
+    out = Text()
+    out.append_text(list_title(
+        "LIBRARY · STATS", len(flat),
+        " [enter] open/play · [x] reload · [A] add to playlist ", theme, t))
+    out.append("\n" + "─" * (width - 4) + "\n", style="grey27")
+    if app.loading.get("library"):
+        out.append(" crunching your listening stats…\n",
+                   style=theme_color(theme, t, light=0.55 + 0.2 * math.sin(t * 5)))
+    for i in range(scroll, min(len(rows), scroll + rows_avail)):
+        kind, obj = rows[i]
+        if kind == "section":
+            out.append("\n ", style="")
+            out.append(f" {obj} ", style=f"bold {theme_color(theme, t, light=0.62)}")
+            out.append("\n", style="")
+            continue
+        selected = i == sel
+        line_y = y0 + out.plain.count("\n")
+        app.add_zone(x0, line_y, width - 2, 1,
+                     type="select", view="library", index=i)
+        if kind == "track":
+            out.append_text(track_row(obj, i - scroll, selected, width - 4, theme, t))
+        else:  # artist
+            caret = "❯" if selected else " "
+            if selected:
+                accent = theme_color(theme, t, light=0.55)
+                body = (f"  [ARTIST]  {truncate(obj.name, max(10, width - 30))}"
+                        f"  tap into their top tracks")
+                out.append(f"{caret} ", style=f"bold black on {accent}")
+                out.append(body.ljust(width - 4), style=f"bold black on {accent}")
+            else:
+                out.append(f"{caret} ", style="grey30")
+                out.append("  [ARTIST]  ",
+                           style=theme_color(theme, t, phase=i * 0.4, light=0.5))
+                out.append(truncate(obj.name, max(10, width - 30)), style="white")
+                out.append("  tap into their top tracks", style="grey50")
+        out.append("\n")
+    return Panel(out, box=box.ROUNDED, border_style=theme_color(theme, t, light=0.40))
+
+
+HELP_LINES = [
+    ("views",   "1…7 / tab / ↑↓ j/k + enter  (or click them)"),
+    ("mouse",   "click seek bar to scrub · click volume · click rows/nav · wheel scrolls · right-click a track = add to playlist"),
+    ("play",    "space = pause/resume · n next · b prev · ←/→ seek 5 s · ,/. seek 30 s"),
+    ("volume",  "+ / − (5 % steps) · click/drag the footer bar"),
+    ("modes",   "s shuffle · r repeat off→all→one"),
+    ("like",    "l = like/unlike current track"),
+    ("lyrics",  "L = karaoke lyrics panel (lrclib sync; genius.com text fallback) · also always under Devices [6]"),
+    ("library", "5 = recently played + your top tracks & top artists"),
+    ("search",  "/ type — returns artists, albums, playlists & tracks"),
+    ("sort",    "o cycles: default → date added → title → artist → album → duration"),
+    ("playlist", "enter opens · 'a' plays whole thing · 'x' reloads"),
+    ("edit",    "C create playlist · A add track to playlist · d remove from open one"),
+    ("queue",   "u or 7 = full queue view · enter/click jumps · d kicks a song out"),
+    ("sleep",   "Z cycles the sleep timer 15→30→45→60 min→off (pauses for you)"),
+    ("resume",  "R resumes your last session where you left it (saved on quit)"),
+    ("devices", "m opens devices · enter picks one (remote mode)"),
+    ("look",    "t cycles color themes (aurora/sunset/ocean/candy/vampire 🦇/mono)"),
+]
+
+
+def render_help(app, width: int, height: int) -> Panel:
+    theme, t = app.theme, app.t()
+    out = Text()
+    out.append_text(gradient_text(" KEYBOARD MAP ", theme, t, step=0.4))
+    out.append("\n")
+    out.append(" " + "─" * (width - 8) + "\n\n", style="grey27")
+    for row in HELP_LINES:
+        name, keys = row[0], row[1]
+        extra = row[2] if len(row) > 2 else ""
+        out.append(f"  {name:<9}", style=f"bold {theme_color(theme, t, light=0.6)}")
+        out.append(f"{keys}\n", style="grey70")
+        if extra:
+            out.append(f"{'':13}{extra}\n", style="grey50")
+    out.append("\n  termify — by @johnthemailboy · an unofficial, personal-use client.\n", style="grey42")
+    out.append("  not affiliated with Spotify AB. premium required.\n", style="grey35")
+    out.append("\n  press ? or esc to go back\n", style=theme_color(theme, t, light=0.5))
+    return Panel(out, box=box.ROUNDED, border_style=theme_color(theme, t, light=0.40))
+
+
+def render_footer(app, width: int, x0: int, y0: int) -> Panel:
+    theme, t = app.theme, app.t()
+    snap = app.snap
+    toast = app.current_toast()
+    accent = theme_color(theme, t, light=0.58)
+    line1 = Text()
+    if toast:
+        line1.append(" ♪ ", style=theme_color(theme, t, light=0.65))
+        line1.append(truncate(toast, width - 6),
+                     style=f"bold {theme_color(theme, t, light=0.62)}")
+    else:
+        x = 1
+        # ---- transport buttons (real clickable buttons, beefy size)
+        line1.append(" ")
+        bface = f"bold {accent}"
+        binv = f"bold black on {accent}"
+        edge = theme_color(theme, t, light=0.38)
+        playing_txt = Text.assemble(("[ ", edge), ("❚❚", bface), (" ]", edge)) \
+            if snap.playing else \
+            Text.assemble(("[ ", edge), ("▶ ", binv), (" ]", edge))
+        line1.append_text(playing_txt)
+        line1.append(" ")
+        app.add_zone(x0 + x, y0, 6, 1, type="btn", action="toggle")
+        x += 7
+        line1.append_text(Text.assemble(("[ ", edge), ("◄◄", bface), (" ]", edge)))
+        line1.append(" ")
+        app.add_zone(x0 + x, y0, 6, 1, type="btn", action="prev")
+        x += 7
+        line1.append_text(Text.assemble(("[ ", edge), ("►►", bface), (" ]", edge)))
+        line1.append(" ")
+        app.add_zone(x0 + x, y0, 6, 1, type="btn", action="next")
+        x += 7
+        rep_lbl = {"off": "off", "context": "all", "track": "one"}[snap.repeat]
+        rep_style = bface if snap.repeat != "off" else "grey50"
+        line1.append_text(Text.assemble(("[ ", edge), (f"↻{rep_lbl}", rep_style),
+                                        (" ]", edge)))
+        line1.append(" ")
+        app.add_zone(x0 + x, y0, 8, 1, type="btn", action="repeat")
+        x += 9
+        sh_style = bface if snap.shuffle else "grey50"
+        line1.append_text(Text.assemble(("[ ", edge), ("⇄ ", sh_style), (" ]", edge)))
+        app.add_zone(x0 + x, y0, 6, 1, type="btn", action="shuffle")
+        x += 7
+        if getattr(app, "sleep_end", None):
+            left = max(0, int((app.sleep_end - _time.monotonic()) / 60))
+            chip = f" 😴{left}m"
+            line1.append(chip, style="grey45")
+            x += len(chip)
+
+        # ---- the song title down here, where the eyes live
+        W = width - 4               # panel border+padding eats 4 cells
+        vol_w = max(6, min(14, width // 13))
+        vol_block = 7 + vol_w + 5   # "   vol " + bar + " NN%"
+        msg_txt = (" · " + truncate(snap.message, 14)) if snap.message else ""
+        tr = snap.track
+        if tr:
+            raw = f"{tr.name} — {tr.artists}"
+            heart_w = 2 if tr.liked else 0
+            name_w = max(8, min(W - x - vol_block - heart_w
+                                - len(msg_txt) - 8, 42))
+            line1.append("  ♪ ", style=theme_color(theme, t, light=0.6))
+            line1.append(marquee(raw, name_w, t), style="bold white")
+            if tr.liked:
+                line1.append(" ♥", style=theme_color(theme, t, phase=0.8, light=0.55))
+            x += 4 + name_w + heart_w
+        else:
+            line1.append("  · nothing playing - open a list and hit enter",
+                         style="grey40")
+        if msg_txt:
+            line1.append(msg_txt, style="grey42")
+            x += len(msg_txt)
+        # ---- volume bar hugs the right edge
+        vol_x = W - vol_block - 1
+        line1.append(" " * max(1, vol_x - x))
+        line1.append("   vol ", style="grey50")
+        line1.append_text(bar(vol_w, snap.volume / 100.0, theme, t))
+        line1.append(f" {snap.volume:>3}%", style="grey62")
+        app.add_zone(x0 + vol_x + 7, y0, vol_w, 1, type="volume")
+
+    line2 = Text()
+    if app.typing:
+        target = getattr(app, "typing_target", "search")
+        label = " new playlist▸ " if target == "playlist" else " search▸ "
+        hint = ("  (enter to create · esc to cancel)" if target == "playlist"
+                else "  (enter to search · esc to cancel)")
+        line2.append(label, style=f"bold {theme_color(theme, t, light=0.6)}")
+        line2.append(app.type_buf, style="white")
+        line2.append("▌", style=theme_color(theme, t, light=0.6 + 0.3 * math.sin(t * 6)))
+        line2.append(hint, style="grey37")
+    elif getattr(app, "mouse_debug", False):
+        from . import __version__
+        inp = getattr(app, "input", None)
+        enabled = getattr(inp, "mouse_enabled", True)
+        mode = getattr(inp, "_mode", "?")
+        line2.append(f" v{__version__}", style="grey46")
+        if enabled:
+            line2.append(f" mouse: on ({mode})", style=theme_color(theme, t, light=0.6))
+        else:
+            line2.append(" mouse: OFF - terminal isn't sending events"
+                         f" (mode {mode})", style="bold #ff5555")
+        code, x, y, hit = getattr(app, "_last_mouse", (0, 0, 0, "-"))
+        age = _time.monotonic() - getattr(app, "_last_mouse_t", 0.0)
+        last = f"code {code} @{x},{y}→{hit}" if age < 8 else "none yet"
+        line2.append("  └ last mouse: " + last, style="grey62")
+        key_age = _time.monotonic() - getattr(app, "_last_key_t", 0.0)
+        key_txt = getattr(app, "_last_key", "none yet")
+        shown_key = key_txt if key_age < 8 else "none yet"
+        line2.append(f"   key: {shown_key}", style=theme_color(theme, t, light=0.55))
+        line2.append("   [M] close", style="grey40")
+    else:
+        line2.append(truncate(KEY_LEGEND, width - 2), style="grey42")
+    return Panel(Text.assemble(line1, "\n", line2), box=box.ROUNDED,
+                 border_style=theme_color(theme, t, light=0.40), padding=(0, 1))
+
+
+# ------------------------------------------------------------------ root
+
+NAV_W = 24
+
+
+def build(app, width: int, height: int):
+    app.zones.clear()
+    if width < 72 or height < 20:
+        return Panel(
+            Align.center(
+                Text(f"termify needs at least 72×20\nyou have {width}×{height}\nplease resize ♪",
+                     style="grey70"),
+                vertical="middle",
+            ),
+            box=box.ROUNDED,
+        )
+    big_logo = height >= (34 if app.theme == "vampire" else 30)
+    header_h = (len(banner_for(app.theme)) + 3) if big_logo else 4
+    footer_h = 4
+    body_h = height - header_h - footer_h
+
+    # content origins (panel borders + padding accounted for)
+    mx0, my0 = NAV_W + 1, header_h + 1   # main panel content
+    fy0 = height - footer_h + 1          # footer content, first line
+
+    root = Layout()
+    root.split_column(
+        Layout(name="header", size=header_h),
+        Layout(name="body"),
+        Layout(name="footer", size=footer_h),
+    )
+    root["header"].update(render_header(app, width, big_logo))
+    root["footer"].update(render_footer(app, width, 2, fy0))
+
+    main_w = width - NAV_W
+    if app.help_visible:
+        main = render_help(app, main_w, body_h)
+    elif app.picker is not None:
+        main = render_picker(app, main_w, body_h, mx0, my0)
+    elif app.show_lyrics:
+        main = render_lyrics(app, main_w, body_h)
+    elif app.view == "home":
+        main = render_home(app, main_w, body_h, mx0, my0)
+    elif app.view == "search":
+        main = render_search(app, main_w, body_h, mx0, my0)
+    elif app.view == "playlists":
+        main = render_playlists(app, main_w, body_h, mx0, my0)
+    elif app.view == "playlist_tracks":
+        pl = app.current_pl
+        main = render_track_list(
+            app, "playlist_tracks",
+            f"PLAYLIST ▸ {pl.name if pl else '?'}", app.rows.get("playlist_tracks", []),
+            main_w, body_h, mx0, my0)
+    elif app.view == "queue":
+        main = render_queue(app, main_w, body_h, mx0, my0)
+    elif app.view == "liked":
+        main = render_track_list(app, "liked", "LIKED SONGS",
+                                 app.rows.get("liked", []), main_w, body_h, mx0, my0)
+    elif app.view == "artist":
+        ar = app.current_artist
+        main = render_track_list(
+            app, "artist", f"ARTIST ▸ {ar.name if ar else '?'} · TRACKS",
+            app.rows.get("artist", []), main_w, body_h, mx0, my0)
+    elif app.view == "album":
+        al = app.current_album
+        main = render_track_list(
+            app, "album", f"ALBUM ▸ {al.name if al else '?'} · {al.year if al else ''}",
+            app.rows.get("album", []), main_w, body_h, mx0, my0)
+    elif app.view == "library":
+        main = render_library(app, main_w, body_h, mx0, my0)
+    elif app.view == "devices":
+        main = render_devices(app, main_w, body_h, mx0, my0)
+    else:
+        main = Panel(Text("???"))
+    root["body"].split_row(
+        Layout(render_nav(app, 1, my0, body_h), name="nav", size=NAV_W),
+        Layout(main, name="main"),
+    )
+    return root
