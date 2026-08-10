@@ -1,3 +1,20 @@
+# Termify update — v0.2.0: stats, queue control, duplicate finder
+
+made with ♥ by @johnthemailboy
+
+## New in v0.2.0
+
+- **📊 Listening stats** — press `S`. Tracks your listening locally in
+  `~/.termify/stats.json`: minutes today / last 7 days / all time, a day
+  streak, your top tracks & artists, and a **"your week in music"** report.
+  Recorded automatically while you listen. Nothing is sent anywhere.
+- **➡️ Play next / play later** — `N` queues the selected track to play right
+  after the current one; `E` parks it at the end of the queue.
+- **🧹 Duplicate finder** — press `F` inside a playlist (or Liked Songs) to fold
+  the list down to just the duplicate songs; press `F` again to restore.
+
+---
+
 # Termify update — playlist fix + date added
 
 made with ♥ by @johnthemailboy
