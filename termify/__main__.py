@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 import time
 
@@ -47,6 +48,7 @@ def make_shot(app, path: str) -> None:
     console = Console(record=True, width=W, height=H)
     app._t0 -= 3.5  # mid-animation phase, prettier frame
     console.print(app.render(W, H))
+    os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
     try:
         console.save_svg(path, title="Termify")
     except TypeError:
