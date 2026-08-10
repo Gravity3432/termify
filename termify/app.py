@@ -24,6 +24,8 @@ from .input_layer import (
     InputReader,
 )
 from .models import Snapshot, Track
+from .catalog import Catalog
+from .stats import Stats, fmt_ms
 
 FPS = 20
 
@@ -86,7 +88,8 @@ class App:
         self.mouse_debug = False
         self._last_mouse: tuple = (0, 0, 0, "")
 
-        # lyrics / picker / sleep timer / session resume
+        # lyrics / picker / sleep timer / session resume / stats
+        self.show_stats = False
         self.show_lyrics = False
         self.lyrics_state = {"id": None, "synced": [], "plain": [], "loading": False}
         self._lyrics_track_id = None
@@ -96,6 +99,13 @@ class App:
         self._sleep_mins = None
         self._resume_offer = cfg.get("last_session") or None
         self.live_bands = None
+        self._dupes_active = False
+        self._dupes_orig = []
+
+        # local listening stats
+        self.stats = Stats(config.APP_DIR / "stats.json")
+        self._stats_last_ms = 0          # last known position for elapsed calc
+        self._stats_track = None         # track we're currently counting
 
         self.snap = Snapshot(
             volume=int(cfg.get("volume", 60)),
@@ -225,6 +235,7 @@ class App:
             if self.snap.playing:
                 self._call(self.engine.toggle)
             self.toast("😴 sleep timer hit zero - pausing. rest well ♪", 6)
+        self._record_stats()
 
     def _fetch_lyrics(self, track) -> None:
         try:
@@ -240,6 +251,21 @@ class App:
             "source": data.get("source") or "",
             "loading": False,
         }
+
+    def _record_stats(self) -> None:
+        """Accumulate the time actually spent listening into local stats."""
+        tr = self.snap.track
+        if tr is None:
+            self._stats_track = None
+            self._stats_last_ms = 0
+            return
+        pos = self.snap.position_ms
+        if self._stats_track is not None and self._stats_track.uri == tr.uri:
+            # same track continuing; credit the forward progress (skip seeks back)
+            if self.snap.playing and pos > self._stats_last_ms:
+                self.stats.add_play(tr, pos - self._stats_last_ms)
+        self._stats_track = tr
+        self._stats_last_ms = pos
 
     # ------------------------------------------------------------ data views
     def ensure_view(self, view: str, force: bool = False) -> None:
@@ -588,6 +614,9 @@ class App:
             self.type_buf = self.search_q or ""
             return
         if ch in (K_ESC,):
+            if self.show_stats:
+                self.show_stats = False
+                return
             self.go_back()
             return
         if ch in ("1", "2", "3", "4", "5", "6", "7"):
@@ -681,6 +710,20 @@ class App:
             return
         if ch == "R":
             self._resume_last()
+            return
+        if ch == "S":
+            self.show_stats = not self.show_stats
+            if self.show_stats:
+                self.show_lyrics = False
+            return
+        if ch == "N":
+            self._queue_selected(to_end=False)
+            return
+        if ch == "E":
+            self._queue_selected(to_end=True)
+            return
+        if ch == "F":
+            self._toggle_duplicates()
             return
         if ch == "d":
             if self.view == "playlist_tracks":
@@ -823,6 +866,44 @@ class App:
             if rows and i < len(rows) and isinstance(rows[i], Track):
                 return rows[i]
         return None
+
+    def _queue_selected(self, to_end: bool) -> None:
+        tr = self._selected_track()
+        if tr is None:
+            self.toast("hover a track row first (N = play next, E = queue at end)")
+            return
+        qf = getattr(self.engine, "queue_insert", None)
+        if qf is None:
+            self.toast("your engine can't edit the queue here")
+            return
+        self._call(lambda: qf(tr, to_end))
+
+    def _toggle_duplicates(self) -> None:
+        """F: fold the current track list down to just the duplicate songs."""
+        view = self.view
+        if view not in ("liked", "playlist_tracks"):
+            self.toast("F works in a playlist or your liked songs")
+            return
+        rows = self.rows.get(view, [])
+        if not isinstance(rows, list) or not rows or not isinstance(rows[0], Track):
+            self.toast("load a list first, then press F")
+            return
+        if not getattr(self, "_dupes_active", False):
+            dupes = Catalog.find_duplicates(rows)
+            if not dupes:
+                self.toast("no duplicate songs in this list ✓")
+                return
+            self._dupes_orig = list(rows)
+            self.rows[view] = dupes
+            self._dupes_active = True
+            self.clamp_sel(view)
+            self.toast(f"showing {len(dupes)} duplicate(s) · press F again to restore", 6)
+        else:
+            self.rows[view] = self._dupes_orig
+            self._dupes_active = False
+            self.clamp_sel(view)
+            self.toast("restored full list")
+        self._apply_sort(view) if getattr(self, "_apply_sort", None) else None
 
     def _open_picker(self) -> None:
         tr = self._selected_track()
@@ -1203,6 +1284,10 @@ class App:
             vol = getattr(self.engine, "_volume", None) or getattr(self.engine, "_vol", None)
             if vol is not None:
                 self.cfg["volume"] = int(vol)
+        except Exception:
+            pass
+        try:
+            self.stats.save()
         except Exception:
             pass
         config.save_config(self.cfg)

@@ -330,6 +330,19 @@ class DemoEngine:
             return True
         return False
 
+    def queue_insert(self, track: Track, to_end: bool = False) -> None:
+        if not track:
+            return
+        idx = next((i for i, t in enumerate(self._tracks)
+                    if t.uri == track.uri), None)
+        if idx is None:
+            idx = len(self._tracks)
+            self._tracks.append(track)
+        if to_end:
+            self._order.append(idx)
+        else:
+            self._order.insert(self._pos + 1, idx)
+
     def seek_ms(self, ms: int) -> None:
         t = self._current()
         if t:

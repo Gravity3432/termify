@@ -14,6 +14,7 @@ from rich.text import Text
 
 from .lyrics import current_index as lyric_index
 from .models import Snapshot, Track
+from .stats import fmt_ms
 
 # ------------------------------------------------------------------ themes
 # (base hue, hue span to sweep through, sweep period in seconds)
@@ -1021,6 +1022,55 @@ def render_library(app, width: int, height: int, x0: int, y0: int) -> Panel:
     return Panel(out, box=box.ROUNDED, border_style=theme_color(theme, t, light=0.40))
 
 
+def render_stats(app, width: int, height: int) -> Panel:
+    """'S' overlay: your listening stats + a 'your week in music' digest."""
+    theme, t = app.theme, app.t()
+    st = app.stats
+    out = Text()
+    out.append_text(gradient_text(" LISTENING STATS ", theme, t, step=0.4))
+    out.append("   [S / esc] close", style="grey37")
+    out.append("\n" + "─" * (width - 4) + "\n", style="grey27")
+
+    def row(label: str, value: str, style: str = "") -> None:
+        out.append(f"  {label:<13}", style=f"bold {theme_color(theme, t, light=0.6)}")
+        out.append(value + "\n", style=style or "white")
+
+    row("today", fmt_ms(st.ms_today()), theme_color(theme, t, light=0.7))
+    row("last 7 days", fmt_ms(st.ms_period(7)))
+    row("all time", fmt_ms(st.ms_all()), "grey62")
+    day_streak = st.streak_days()
+    row("day streak", f"{day_streak} day{'s' if day_streak != 1 else ''} 🔥"
+        if day_streak else "0", theme_color(theme, t, light=0.6))
+    row("since", st.data.get("since", "") or "—", "grey50")
+
+    out.append("\n " + "─" * (width - 6) + "\n", style="grey27")
+    out.append(" 📅  YOUR WEEK IN MUSIC\n", style=f"bold {theme_color(theme, t, light=0.6)}")
+    rep = st.weekly_report()
+    row("minutes", f"{rep['minutes']} min")
+    row("streak", f"{rep['streak']} day{'s' if rep['streak'] != 1 else ''}",
+        "grey62" if rep["streak"] else "grey40")
+    out.append("  top tracks:\n", style="grey58")
+    if rep["top_tracks"]:
+        for i, (name, artists, ms) in enumerate(rep["top_tracks"], 1):
+            out.append(f"   {i}. {truncate(name, max(8, width - 40))}"
+                       f" — {truncate(artists, 22)}", style="white")
+            out.append(f"  ({fmt_ms(ms)})\n", style="grey45")
+    else:
+        out.append("   nothing yet - go listen! ♪\n", style="grey42")
+    out.append("  top artists:\n", style="grey58")
+    if rep["top_artists"]:
+        for i, (artist, ms) in enumerate(rep["top_artists"], 1):
+            out.append(f"   {i}. {truncate(artist, max(8, width - 30))}"
+                       f"  ({fmt_ms(ms)})\n", style="white")
+    else:
+        out.append("   nothing yet\n", style="grey42")
+    out.append("\n  stats live on your machine in ~/.termify/stats.json\n",
+               style="grey35")
+    out.append("  (nothing is sent anywhere - it's yours) ✓\n", style="grey35")
+    return Panel(out, box=box.ROUNDED,
+                 border_style=theme_color(theme, t, light=0.40))
+
+
 HELP_LINES = [
     ("views",   "1…7 / tab / ↑↓ j/k + enter  (or click them)"),
     ("mouse",   "click seek bar to scrub · click volume · click rows/nav · wheel scrolls · right-click a track = add to playlist"),
@@ -1033,10 +1083,11 @@ HELP_LINES = [
     ("search",  "/ type — returns artists, albums, playlists & tracks"),
     ("sort",    "o cycles: default → date added → title → artist → album → duration"),
     ("playlist", "enter opens · 'a' plays whole thing · 'x' reloads"),
-    ("edit",    "C create playlist · A add track to playlist · d remove from open one"),
-    ("queue",   "u or 7 = full queue view · enter/click jumps · d kicks a song out"),
+    ("edit",    "C create playlist · A add track to playlist · d remove from open one · F find duplicates"),
+    ("queue",   "u or 7 = full queue view · enter/click jumps · d kicks out · N = play next · E = queue at end"),
     ("sleep",   "Z cycles the sleep timer 15→30→45→60 min→off (pauses for you)"),
     ("resume",  "R resumes your last session where you left it (saved on quit)"),
+    ("stats",   "S = listening stats + 'your week in music' report (stored locally)"),
     ("devices", "m opens devices · enter picks one (remote mode)"),
     ("look",    "t cycles color themes (aurora/sunset/ocean/candy/vampire 🦇/mono)"),
 ]
@@ -1217,6 +1268,8 @@ def build(app, width: int, height: int):
         main = render_picker(app, main_w, body_h, mx0, my0)
     elif app.show_lyrics:
         main = render_lyrics(app, main_w, body_h)
+    elif app.show_stats:
+        main = render_stats(app, main_w, body_h)
     elif app.view == "home":
         main = render_home(app, main_w, body_h, mx0, my0)
     elif app.view == "search":

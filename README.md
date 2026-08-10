@@ -32,6 +32,13 @@ fun to look at.
 - 📚 **Your whole library** — playlists (every song, no 500-song cut-off),
   Liked Songs, search, albums, artists, recently played.
 - 🎤 **Karaoke lyrics** — synced lines from LRCLib, with a Genius fallback.
+- 📊 **Listening stats** — press `S` for a stats panel with your *"week in
+  music"* report (minutes, top tracks/artists, day streak) — stored privately
+  on your machine.
+- 🧹 **Duplicate finder** — press `F` in a playlist to fold it down to just the
+  duplicate songs.
+- ➡️ **Play next / play later** — press `N` to queue a track right after the
+  current one, or `E` to park it at the end of the queue.
 - 🎨 **Gorgeous ASCII UI** — gradient splash banner, album art as truecolor
   half-block art, an animated visualizer, and 6 switchable themes.
 - 🖱️ **Mouse support** — click zones, double-click to play, wheel scroll,
@@ -43,9 +50,9 @@ fun to look at.
 
 ## 📸 Screenshots
 
-| Playlists | Queue |
-|-----------|-------|
-| <img src="docs/screenshot-playlists.svg" width="400"> | <img src="docs/screenshot-queue.svg" width="400"> |
+| Playlists | Queue | Stats |
+|-----------|-------|-------|
+| <img src="docs/screenshot-playlists.svg" width="400"> | <img src="docs/screenshot-queue.svg" width="400"> | <img src="docs/screenshot-stats.svg" width="400"> |
 
 ---
 
@@ -106,6 +113,9 @@ bottom of the screen.
 | `l` | Like / unlike current song |
 | `/` | Search |
 | `o` | Sort list (default → date added → title → artist → album → duration) |
+| `S` | Listening stats + "your week in music" report |
+| `N` / `E` | Queue selected track to play next / at the end |
+| `F` | Find duplicate songs in the current playlist / liked |
 | `1`–`7` | Jump to view |
 | `u` | Queue |
 | `t` | Cycle theme |

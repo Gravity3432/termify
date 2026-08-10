@@ -692,6 +692,27 @@ class StreamEngine:
                 return True
         return False
 
+    def queue_insert(self, track: Track, to_end: bool = False) -> None:
+        """Slot a track into the play order: right after now (next), or end."""
+        if not track:
+            return
+        with self._lock:
+            # make sure the track object is in the context pool
+            idx = next((i for i, t in enumerate(self._tracks)
+                        if t.uri == track.uri), None)
+            if idx is None:
+                idx = len(self._tracks)
+                self._tracks.append(track)
+            if to_end:
+                self._order.append(idx)
+            else:
+                self._order.insert(self._pos + 1, idx)
+        name = f"'{track.name}'"
+        if to_end:
+            self._toast_cb(f"queued {name} at the end")
+        else:
+            self._toast_cb(f"{name} will play next")
+
     def prev(self) -> None:
         # >3 s in: restart the track like every other player
         if self.player.position_ms() > 3000:

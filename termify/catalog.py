@@ -466,6 +466,23 @@ class Catalog:
             if cached is not None:
                 t.liked = cached[0]
 
+    @staticmethod
+    def find_duplicates(tracks: List[Track]) -> List[Track]:
+        """Return the 2nd+ occurrence of any track that appears more than once
+        (matched by URI, falling back to name+artists). Callers can then
+        remove those to dedupe a playlist."""
+        seen: Dict[str, Track] = {}
+        dupes: List[Track] = []
+        for t in tracks:
+            if not t:
+                continue
+            key = t.uri or f"{t.name}|{t.artists}".lower()
+            if key in seen:
+                dupes.append(t)
+            else:
+                seen[key] = t
+        return dupes
+
     def set_liked(self, track: Track, flag: bool) -> bool:
         ok = self._library_modify("PUT" if flag else "DELETE", [track.uri])
         if not ok:  # legacy fallback
