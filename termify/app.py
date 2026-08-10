@@ -16,6 +16,10 @@ from .input_layer import (
     K_ENTER,
     K_ESC,
     K_LEFT,
+    K_MEDIA_NEXT,
+    K_MEDIA_PLAY,
+    K_MEDIA_PREV,
+    K_MEDIA_STOP,
     K_PGDN,
     K_PGUP,
     K_RIGHT,
@@ -25,11 +29,12 @@ from .input_layer import (
 )
 from .models import Snapshot, Track
 from .catalog import Catalog
+from .media_keys import MediaKeyController
 from .stats import Stats, fmt_ms
 
 FPS = 20
 
-VIEW_ORDER = ["home", "search", "playlists", "liked", "library", "devices", "queue"]
+VIEW_ORDER = ["home", "search", "playlists", "liked", "library", "devices", "queue", "lyrics"]
 
 # Spotify-style sort cycle for track lists (None = original order)
 SORT_MODES = [
@@ -101,6 +106,10 @@ class App:
         self.live_bands = None
         self._dupes_active = False
         self._dupes_orig = []
+
+        # global keyboard media-button hook (optional, non-fatal)
+        self.media_keys = MediaKeyController()
+        self._media_enabled = bool(cfg.get("media_keys", True))
 
         # local listening stats
         self.stats = Stats(config.APP_DIR / "stats.json")
@@ -269,7 +278,7 @@ class App:
 
     # ------------------------------------------------------------ data views
     def ensure_view(self, view: str, force: bool = False) -> None:
-        if view in ("home", "search", "queue"):
+        if view in ("home", "search", "queue", "lyrics"):
             return  # snapshot-driven views need no fetching
         if view in self._loaded_views and not force:
             return
@@ -619,7 +628,7 @@ class App:
                 return
             self.go_back()
             return
-        if ch in ("1", "2", "3", "4", "5", "6", "7"):
+        if ch in ("1", "2", "3", "4", "5", "6", "7", "8"):
             self.goto(VIEW_ORDER[int(ch) - 1])
             return
         if ch == "\t":
@@ -652,6 +661,15 @@ class App:
             self._call(self.engine.next)
             return
         if ch.lower() in ("b", "p"):
+            self._call(self.engine.prev)
+            return
+        if ch in (K_MEDIA_PLAY, K_MEDIA_STOP):
+            self._call(lambda: self.engine.toggle())
+            return
+        if ch == K_MEDIA_NEXT:
+            self._call(self.engine.next)
+            return
+        if ch == K_MEDIA_PREV:
             self._call(self.engine.prev)
             return
         if ch == K_LEFT:
@@ -694,7 +712,7 @@ class App:
             if not self.snap.track:
                 self.toast("play something first, then lyrics ♪")
                 return
-            self.show_lyrics = True
+            self.goto("lyrics")
             return
         if ch == "Z":
             self._sleep_cycle()
@@ -757,6 +775,20 @@ class App:
         if ch == "a":
             self.action_play_all()
             return
+
+    def _on_media(self, action: str) -> None:
+        """Route a global media-button press to the transport."""
+        if self._stop.is_set():
+            return
+        if action == "play":
+            self._call(lambda: self.engine.toggle())
+        elif action == "next":
+            self._call(self.engine.next)
+        elif action == "prev":
+            self._call(self.engine.prev)
+        elif action == "stop":
+            self.snap.playing = False
+            self._call(lambda: self.engine.toggle() if self.snap.playing else None)
 
     def _move(self, delta: int) -> None:
         count = self.view_count()
@@ -1242,6 +1274,8 @@ class App:
         self.input.open()
         threading.Thread(target=self._poll_loop, daemon=True, name="poller").start()
         threading.Thread(target=self._input_loop, daemon=True, name="input").start()
+        if self._media_enabled:
+            self.media_keys.start(self._on_media)
 
         console = Console()
         try:
@@ -1262,6 +1296,10 @@ class App:
 
     def _quit_cleanup(self) -> None:
         self._stop.set()
+        try:
+            self.media_keys.stop()
+        except Exception:
+            pass
         try:
             self.input.close()
         except Exception:

@@ -451,6 +451,7 @@ def render_nav(app, x0: int, y0: int, height: int) -> Panel:
         ("library", "5", "Library"),
         ("devices", "6", "Devices"),
         ("queue", "7", "Queue ♫"),
+        ("lyrics", "8", "Lyrics 🎤"),
     ]
     out = Text()
     out.append(" NAVIGATE\n", style="bold grey50")
@@ -800,35 +801,9 @@ def render_devices(app, width: int, height: int, x0: int, y0: int) -> Panel:
             )
             out.append("\n")
 
-    # ---- karaoke lives here too: lyrics under the device box
-    tr = app.snap.track
-    if tr:
-        st = app.lyrics_state
-        synced = st.get("synced") or []
-        plain = st.get("plain") or []
-        out.append("\n ··· 🎤 LYRICS ···\n", style=f"bold {theme_color(theme, t, light=0.55)}")
-        if st.get("loading"):
-            out.append("  looking up lyrics…\n",
-                       style=theme_color(theme, t, light=0.55 + 0.2 * math.sin(t * 5)))
-        elif synced:
-            cur = lyric_index(synced, app.snap.position_ms)
-            lo = max(0, min(cur - 1, len(synced) - 5))
-            for i in range(lo, min(len(synced), lo + 5)):
-                _ms, line = synced[i]
-                if i == cur:
-                    out.append(" ❯ ")
-                    out.append_text(gradient_text(line, theme, t, step=0.10))
-                    out.append("\n")
-                else:
-                    out.append(f"   {line}\n",
-                               style="grey42" if i < cur else "grey58")
-        elif plain:
-            src_note = " · genius.com" if st.get("source") == "genius" else ""
-            for line in plain[:6]:
-                out.append(f"  {line}\n", style="grey62")
-            out.append(f"  (plain text{src_note} - no sync)\n", style="grey37")
-        else:
-            out.append("  no lyrics found for this one\n", style="grey42")
+    if app.snap.track:
+        out.append("\n lyrics for this track live in their own view\n", style="grey42")
+        out.append(" press L or [8] to open the lyrics panel 🎤\n", style="grey37")
     return Panel(out, box=box.ROUNDED, border_style=theme_color(theme, t, light=0.40))
 
 
@@ -910,7 +885,7 @@ def render_lyrics(app, width: int, height: int) -> Panel:
     else:
         note = "lrclib.net + genius.com"
     out.append_text(gradient_text(" LYRICS ", theme, t, step=0.4))
-    out.append(f"   [L / esc] close · {note}", style="grey37")
+    out.append(f"   [L / esc] back · {note}", style="grey37")
     out.append("\n" + "─" * (width - 4) + "\n", style="grey27")
     if tr:
         out.append(f" ♪ {tr.name} — {tr.artists}\n\n", style="grey62")
@@ -1078,7 +1053,7 @@ HELP_LINES = [
     ("volume",  "+ / − (5 % steps) · click/drag the footer bar"),
     ("modes",   "s shuffle · r repeat off→all→one"),
     ("like",    "l = like/unlike current track"),
-    ("lyrics",  "L = karaoke lyrics panel (lrclib sync; genius.com text fallback) · also always under Devices [6]"),
+    ("lyrics",  "L or [8] = full lyrics view (lrclib sync; genius.com text fallback)"),
     ("library", "5 = recently played + your top tracks & top artists"),
     ("search",  "/ type — returns artists, albums, playlists & tracks"),
     ("sort",    "o cycles: default → date added → title → artist → album → duration"),
@@ -1266,7 +1241,7 @@ def build(app, width: int, height: int):
         main = render_help(app, main_w, body_h)
     elif app.picker is not None:
         main = render_picker(app, main_w, body_h, mx0, my0)
-    elif app.show_lyrics:
+    elif app.show_lyrics or app.view == "lyrics":
         main = render_lyrics(app, main_w, body_h)
     elif app.show_stats:
         main = render_stats(app, main_w, body_h)

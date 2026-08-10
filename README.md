@@ -31,7 +31,11 @@ fun to look at.
 - 🎮 **Full controls** — play/pause, skip, seek, volume, shuffle, repeat, queue.
 - 📚 **Your whole library** — playlists (every song, no 500-song cut-off),
   Liked Songs, search, albums, artists, recently played.
-- 🎤 **Karaoke lyrics** — synced lines from LRCLib, with a Genius fallback.
+- 🎤 **Karaoke lyrics** — a dedicated lyrics view (press `L` or `[8]`) with
+  synced lines from LRCLib and a Genius fallback.
+- 🔘 **Keyboard media buttons** — your keyboard's play/pause / next / prev keys
+  control Termify, even when the terminal isn't focused (needs the optional
+  `keyboard` package).
 - 📊 **Listening stats** — press `S` for a stats panel with your *"week in
   music"* report (minutes, top tracks/artists, day streak) — stored privately
   on your machine.
@@ -116,7 +120,9 @@ bottom of the screen.
 | `S` | Listening stats + "your week in music" report |
 | `N` / `E` | Queue selected track to play next / at the end |
 | `F` | Find duplicate songs in the current playlist / liked |
-| `1`–`7` | Jump to view |
+| `L` / `8` | Open the lyrics view |
+| `1`–`8` | Jump to view |
+| 🎵 media keys | play/pause, next, prev on your keyboard (global, optional) |
 | `u` | Queue |
 | `t` | Cycle theme |
 | `M` | Diagnostics (mouse + last key) |

@@ -36,6 +36,12 @@ K_PGUP = "\x1b[5~"
 K_PGDN = "\x1b[6~"
 K_HOME = "\x1b[H"
 K_END = "\x1b[F"
+# media keys (multimedia keyboards) - we use private-use markers; the app
+# layer maps these to transport actions regardless of terminal/OS.
+K_MEDIA_PLAY = "\xee\x81\x00"
+K_MEDIA_NEXT = "\xee\x81\x01"
+K_MEDIA_PREV = "\xee\x81\x02"
+K_MEDIA_STOP = "\xee\x81\x03"
 
 # readchar (used in fallback mode) returns Windows scan-code forms such as
 # "\x00H" for the up arrow; some consoles prepend "\xe0" instead of "\x00".
@@ -88,6 +94,9 @@ VK_TO_KEY = {
     0x21: K_PGUP, 0x22: K_PGDN, 0x24: K_HOME, 0x23: K_END,
     0x0D: "\r", 0x1B: "\x1b", 0x09: "\t", 0x08: "\x08",
     0x2E: "\x7f", 0x20: " ",
+    # media keys (multimedia keyboards) - delivered as VK codes
+    0xB0: K_MEDIA_NEXT, 0xB1: K_MEDIA_PREV, 0xB3: K_MEDIA_PLAY,
+    0xB2: K_MEDIA_STOP,
 }
 # mouse record bits
 _MBTNS = ((0x0001, 0), (0x0004, 1), (0x0002, 2))  # (bit, sgr btn): left, middle, right

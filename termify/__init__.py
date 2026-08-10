@@ -1,2 +1,2 @@
-__version__ = "0.2.0"  # 0.2.0: listening stats, play-next/play-later, duplicate finder
+__version__ = "0.3.0"  # 0.3.0: dedicated lyrics view + keyboard media buttons
 APP_NAME = "Termify"
