@@ -34,6 +34,31 @@ from .stats import Stats, fmt_ms
 
 FPS = 20
 
+
+def _friendly_api_error(exc) -> str:
+    """Turn any API/network exception into a short, human, useful message."""
+    status = getattr(exc, "http_status", None)
+    msg = str(exc).strip()
+    if status == 401 or "token" in msg.lower() or "auth" in msg.lower():
+        return "login expired - run: python -m termify --setup to reconnect"
+    if status == 403:
+        return "spotify said no (Premium required)"
+    if status == 404:
+        return "no active device - press 'm' to pick one"
+    if status == 429:
+        return "spotify rate limit - wait a moment"
+    if isinstance(exc, (ConnectionError, TimeoutError, OSError)) or \
+            "timed out" in msg.lower():
+        return "can't reach spotify (check your internet)"
+    if not msg:
+        return type(exc).__name__
+    # trim to the useful last line
+    for line in reversed(msg.splitlines()):
+        line = line.strip()
+        if line and "traceback" not in line.lower():
+            return line[:80]
+    return msg[:80]
+
 VIEW_ORDER = ["home", "search", "playlists", "liked", "library", "devices", "queue", "lyrics", "settings"]
 
 # Spotify-style sort cycle for track lists (None = original order)
@@ -224,7 +249,7 @@ class App:
                 self._tick_features()
             except Exception as exc:  # noqa: BLE001
                 self.snap = Snapshot(
-                    status="error", message=str(exc),
+                    status="error", message=_friendly_api_error(exc),
                     device_label=getattr(self.engine, "device_label", ""),
                 )
             self._poll_now.wait(interval)
@@ -335,7 +360,7 @@ class App:
             try:
                 data = fetch()
             except Exception as exc:  # noqa: BLE001
-                self.toast(f"couldn't load {kind}: {exc}")
+                self.toast(f"couldn't load {kind}: {_friendly_api_error(exc)}")
                 data = []
             self.rows_orig[kind] = list(data)
             self._apply_sort(kind)
@@ -880,7 +905,7 @@ class App:
             try:
                 fn()
             except Exception as exc:  # noqa: BLE001
-                self.toast(f"engine: {exc}")
+                self.toast(f"engine: {_friendly_api_error(exc)}")
             self.refresh_now()
 
         self._pool.submit(work)
@@ -890,7 +915,7 @@ class App:
             try:
                 val = fn()
             except Exception as exc:  # noqa: BLE001
-                self.toast(f"engine: {exc}")
+                self.toast(f"engine: {_friendly_api_error(exc)}")
                 return
             if isinstance(val, bool):
                 self.toast(f"{label} {'on' if val else 'off'}")

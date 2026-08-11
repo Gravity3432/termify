@@ -149,12 +149,29 @@ class RemoteEngine:
     # ---------------------------------------------------------- playback
     def _explain(self, exc) -> str:
         status = getattr(exc, "http_status", None)
+        msg = str(exc)
+        # --- authentication / token problems --------------------------
+        if status == 401 or "token" in msg.lower() or "auth" in msg.lower():
+            return ("login expired - run:  python -m termify --setup  "
+                    "(or re-run it) to reconnect Spotify")
         if status == 403:
             return "spotify said no (a Premium account is required)"
         if status == 404:
             self._device_id = None
             return "no active device - press 'm' to pick one"
-        return f"spotify error: {exc}"
+        if status == 429:
+            return "spotify rate limit - wait a moment and retry"
+        # --- network-level ---------------------------------------------
+        if isinstance(exc, (ConnectionError, TimeoutError, OSError)) or \
+                "timed out" in msg.lower() or "network" in msg.lower():
+            return "can't reach spotify (check your internet)"
+        # trim spotipy's wrapped noise to the useful tail
+        if "SpotifyException" in msg or "requests" in msg.lower():
+            for line in reversed(msg.splitlines()):
+                line = line.strip()
+                if line and "traceback" not in line.lower():
+                    return f"spotify error: {line[:80]}"
+        return f"spotify error: {msg[:80]}"
 
     def play_tracks(self, tracks: List[Track], index: int,
                     context_name: str) -> None:
