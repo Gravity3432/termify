@@ -1,2 +1,2 @@
-__version__ = "0.5.1"  # 0.5.1: friendly installer (progress bars) + .exe build option
+__version__ = "0.6.0"  # 0.6.0: one-click build.bat -> ready-to-run Termify.exe
 APP_NAME = "Termify"

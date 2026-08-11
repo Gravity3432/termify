@@ -67,8 +67,9 @@ automatically. What you need depends on how you launch:
 
 | How you run it | Needs Python? | Manual packages? |
 |----------------|---------------|------------------|
-| `install.bat` → `run.bat` | ✅ Python 3.10+ (installed once) | ❌ none — auto |
-| `Termify.exe` (build once) | ❌ no Python at all | ❌ none |
+| `build.bat` → `Termify.exe` | ✅ Python 3.10+ (on the building PC only) | ❌ none — auto |
+| `run.bat` (from source) | ✅ Python 3.10+ | ❌ none — auto |
+| the finished `Termify.exe` | ❌ no Python at all | ❌ none |
 
 - **Spotify Premium.** Spotify enforces this server-side for *any* third-party
   playback. Termify is an unofficial, personal-use client.
@@ -80,12 +81,16 @@ automatically. What you need depends on how you launch:
 
 ## 🚀 Quick start
 
-**Windows — easiest:** double-click **`install.bat`**. A friendly setup walks
-you through it with live progress bars (everything stays in this folder — safe
-to delete anytime to uninstall). Then double-click **`run.bat`** to open the app.
+**Windows — make the app (`Termify.exe`):** double-click **`build.bat`**. It
+sets everything up, downloads what it needs, and leaves you a ready-to-run
+**`dist\Termify.exe`**. Copy that one file anywhere — double-click it, pin it
+to the taskbar — it just runs, no Python needed.
 
-> You can also just double-click `run.bat` and it runs the installer for you on
-> first launch automatically.
+> `build.bat` does the whole thing in one click: private environment →
+> install dependencies → build the exe. Takes a few minutes the first time.
+
+**Windows — run straight from source:** double-click **`run.bat`**. It sets up
+and opens Termify in the terminal (auto-installs on first run).
 
 **One command (macOS / Linux / WSL):**
 ```bash
@@ -95,8 +100,7 @@ termify            # a `termify` command is now on your PATH
 
 **macOS / Linux (no pipx):**
 ```bash
-python3 install.py        # one-time friendly setup
-./run.sh                  # open the app
+./run.sh           # sets up on first run, then opens the app
 ```
 
 **Manual**
@@ -107,18 +111,6 @@ pip install -r requirements.txt
 python -m termify --demo         # offline demo — no login needed
 python -m termify                # the real thing
 ```
-
-### 🪟 Optional: build a Windows `.exe` (pin it to the taskbar)
-Want Termify to feel like a real app instead of a script? Build a standalone
-`Termify.exe` on your Windows machine:
-
-1. Run `install.bat` once (so the environment exists).
-2. Double-click **`build_exe.bat`** — it produces `dist\Termify.exe`.
-3. Right-click `Termify.exe` → **Pin to taskbar** (or Send to → Desktop).
-
-> The exe is built on *your* PC (PyInstaller doesn't cross-compile). It works
-> well, but if audio ever acts up from the exe, `run.bat` is the rock-solid
-> fallback — both give you the same app.
 
 ---
 
@@ -173,13 +165,13 @@ progress/volume bars, right-click a track to add it to a playlist.
 termify/
 ├── termify/          # the app package (.py files)
 ├── requirements.txt  # Python dependencies
-├── install.bat       # friendly Windows installer (progress bars)
-├── install.py        # the installer itself (any OS)
-├── run.bat           # Windows launcher
+├── build.bat         # ONE CLICK -> makes a ready-to-run Termify.exe
+├── run.bat           # Windows launcher (from source)
 ├── run.sh            # macOS/Linux launcher
-├── build_exe.bat     # build a Windows .exe (PyInstaller)
-├── termify.spec      # PyInstaller config for the .exe
-├── docs/             # screenshots
+├── termify.spec      # config for building the .exe
+├── entry.py          # exe entry point
+├── pyproject.toml    # for the pipx install option
+├── docs/             # screenshots + animated GIF
 └── termify.zip       # release zip of the app package
 ```
 
