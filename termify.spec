@@ -9,16 +9,25 @@ as data. If audio output ever fails from the exe, you can still use run.bat /
 install.bat which is the more reliable path.
 """
 
-from PyInstaller.utils.hooks import collect_data_files, collect_submodules
+from PyInstaller.utils.hooks import collect_data_files, collect_submodules, copy_metadata
 
 datas = []
 # bundle the termify package so the exe can import it and find its data
 datas += collect_data_files("termify", include_py_files=True)
+# some libs look up their own package metadata at runtime (e.g. readchar)
+datas += copy_metadata("readchar")
 
 hiddenimports = []
-# PyInstaller sometimes misses dynamically imported libs:
+# PyInstaller sometimes misses dynamically imported libs, so we bundle them
+# and all their submodules explicitly:
 hiddenimports += collect_submodules("termify")
-hiddenimports += ["sounddevice", "numpy", "PIL", "rich", "readchar", "requests"]
+for _lib in ("spotipy", "librespot", "av", "sounddevice", "numpy",
+             "PIL", "rich", "readchar", "requests"):
+    hiddenimports += [ _lib ]
+    try:
+        hiddenimports += collect_submodules(_lib)
+    except Exception:
+        pass
 
 
 a = Analysis(

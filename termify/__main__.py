@@ -119,6 +119,31 @@ def build_engine(cfg, args):
     return engine
 
 
+def _run_import_check() -> None:
+    """Try to import every library the app needs. Used to confirm a built
+    .exe bundled everything (the lazy imports make PyInstaller miss some)."""
+    import importlib
+    libs = ["spotipy", "librespot", "av", "sounddevice", "rich", "readchar",
+            "PIL", "requests", "numpy"]
+    ok = True
+    # sounddevice failing to find an audio *device* is fine (no speakers in
+    # a container); only a missing *module* is a real bundling problem.
+    for name in libs:
+        try:
+            importlib.import_module(name)
+            print(f"  ok  {name}")
+        except Exception as e:  # noqa: BLE001
+            if name == "sounddevice" and "PortAudio library not found" in str(e):
+                print(f"  ok  {name} (no audio device here — fine on a real PC)")
+                continue
+            ok = False
+            print(f"  FAIL {name}: {e}")
+    print("ALL OK" if ok else "MISSING LIBRARIES")
+    if not ok:
+        import sys
+        sys.exit(1)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         prog="termify",
@@ -136,7 +161,13 @@ def main() -> None:
     parser.add_argument("--shot", metavar="SVG", help=argparse.SUPPRESS)  # doc screenshots
     parser.add_argument("--version", action="version",
                         version=f"termify {__version__}")
+    parser.add_argument("--check", action="store_true",
+                        help="verify bundled libraries import (for the .exe)")
     args = parser.parse_args()
+
+    if args.check:
+        _run_import_check()
+        return 0
 
     config.ensure_dirs()
     cfg = config.load_config()
