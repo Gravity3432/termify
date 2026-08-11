@@ -963,101 +963,88 @@ def playlist_card(name: str, owner: str, count: int, idx: int,
 
 
 def render_playlists(app, width: int, height: int, x0: int, y0: int) -> Panel:
-    """Big playlist cards with real cover art, laid out in a grid."""
-    from rich.columns import Columns
-    from rich.console import Group
-
+    """Playlists as full-width rows: cover thumb + name + meta. Each row is
+    one predictable, fully-clickable zone (no Columns misalignment)."""
     theme, t = app.theme, app.t()
     rows = app.rows.get("playlists", [])
-    inner = max(20, width - 4)
-    card_w = 20          # char width of each card
-    cover_h = 8          # rows of cover art per card
-    cols = max(1, min(4, inner // (card_w + 2)))
-    cards_avail = max(1, (height - 8) // (cover_h + 2))
-    total = len(rows) + 1
+    total = len(rows) + 1  # include pinned Liked Songs
     sel = app.sel["playlists"]
+    inner = max(20, width - 4)
+    thumb_w = 10
+    cover_h = 4
+    row_h = cover_h + 1   # cover rows + one meta line
 
-    title = list_title(
+    out = Text()
+    out.append_text(list_title(
         "PLAYLISTS", total,
-        f"· {sel + 1}/{total} · [enter] open · [a] play ", theme, t)
-    title.append("\n" + "─" * (width - 4) + "\n", style="grey27")
-
+        f"· {sel + 1}/{total} · [enter] open · [a] play ", theme, t))
+    out.append("\n" + "─" * (width - 4) + "\n", style="grey27")
     if app.loading.get("playlists"):
-        title.append(" loading…\n",
-                     style=theme_color(theme, t, light=0.55 + 0.2 * math.sin(t * 5)))
-        return Panel(title, box=box.ROUNDED, border_style=panel_border(theme, t))
+        out.append(" loading…\n",
+                   style=theme_color(theme, t, light=0.55 + 0.2 * math.sin(t * 5)))
+        return Panel(out, box=box.ROUNDED, border_style=panel_border(theme, t))
 
-    def art_for_pl(name, img_url, selected):
-        art = app.art_for(img_url, card_w, cover_h)
+    def cover_block(name, img_url):
+        art = app.art_for(img_url, thumb_w, cover_h)
         if art is None:
             top, low = _thumb_colors(name)
             art = Text()
             for r in range(cover_h):
-                art.append(("▄" * card_w) if r < cover_h // 2 else ("▀" * card_w),
+                art.append(("▄" * thumb_w) if r < cover_h // 2
+                           else ("▀" * thumb_w),
                            style=top if r < cover_h // 2 else low)
                 art.append("\n")
-        if selected:
-            accent = sel_accent(theme, t)
-            boxed = Text()
-            boxed.append("╔" + "═" * card_w + "╗\n", style=accent)
-            for line in art.plain.split("\n"):
-                if line:
-                    boxed.append("║", style=accent)
-                    boxed.append(line.ljust(card_w), style=accent)
-                    boxed.append("║\n", style=accent)
-            boxed.append("╚" + "═" * card_w + "╝", style=accent)
-            return boxed
         return art
 
-    cards = [("Liked Songs", "your collection · ∞", "demo:liked")]
-    for pl in rows:
-        cards.append((pl.name, f"by {pl.owner or 'spotify'} · {pl.count}",
-                      pl.image_url or f"demo:pl_{pl.name}"))
+    avail = max(1, (height - 8) // row_h)
 
-    first = max(0, sel - cards_avail + 1)
-    shown = cards[first:first + cards_avail]
+    def add_row(view_idx, name, meta, img_url, screen_row, is_liked=False):
+        is_sel = (sel == view_idx)
+        accent = sel_accent(theme, t)
+        # clickable zone covering this full row
+        row_y = y0 + 2 + screen_row * row_h
+        app.add_zone(x0 + 1, row_y, inner, row_h,
+                     type="select", view="playlists", index=view_idx)
+        out.append("❯" if is_sel else " ", style="bold" if is_sel else "grey30")
+        art = cover_block(name, img_url)
+        art_lines = art.plain.split("\n")[:cover_h]
+        sel_style = f"bold black on {accent}" if is_sel else ""
+        for r in range(cover_h):
+            line = art_lines[r] if r < len(art_lines) else " " * thumb_w
+            if r == 0:
+                out.append(" ", style="")
+                out.append(line.ljust(thumb_w),
+                           style="grey60" if not is_sel else sel_style)
+                name_txt = "♥ " + name if is_liked else name
+                out.append("  ", style="")
+                out.append(truncate(name_txt, max(8, inner - thumb_w - 12)),
+                           style="bold white" if not is_sel else sel_style)
+                out.append("\n")
+            else:
+                out.append(" ", style="")
+                out.append(line.ljust(thumb_w),
+                           style="grey60" if not is_sel else sel_style)
+                out.append("\n")
+        out.append(" " + " " * thumb_w + "  ", style="")
+        out.append(meta, style="grey50" if not is_sel else f"black on {accent}")
+        out.append("\n")
 
-    renderables = []
-    row_y = y0 + 2  # content starts below title + divider
-    for start in range(0, len(shown), cols):
-        chunk = shown[start:start + cols]
-        art_blocks = []
-        cap_blocks = []
-        for ci, (name, meta, img) in enumerate(chunk):
-            idx_in_list = first + start + ci
-            is_sel = (sel == idx_in_list)
-            art_blocks.append(art_for_pl(name, img, is_sel))
-            cap = Text()
-            cap.append(truncate(name, card_w).ljust(card_w),
-                       style="bold white" if not is_sel
-                       else f"bold black on {sel_accent(theme, t)}")
-            cap.append("\n")
-            cap.append(truncate(meta, card_w).ljust(card_w),
-                       style="grey50" if not is_sel
-                       else f"black on {sel_accent(theme, t)}")
-            cap_blocks.append(cap)
-        heights = [a.plain.count("\n") for a in art_blocks]
-        hmax = max(heights) if heights else cover_h
-        for art, h in zip(art_blocks, heights):
-            if h < hmax:
-                art.append("\n" * (hmax - h))
-        renderables.append(Columns(art_blocks, expand=False, padding=(0, 2)))
-        renderables.append(Text("\n"))
-        renderables.append(Columns(cap_blocks, expand=False, padding=(0, 2)))
-        renderables.append(Text("\n"))
-        for ci in range(len(chunk)):
-            idx_in_list = first + start + ci
-            app.add_zone(x0 + 1 + ci * (card_w + 2), row_y,
-                         card_w + 2, hmax + 3, type="select",
-                         view="playlists", index=idx_in_list)
-        row_y += hmax + 3
-    if len(rows) > first + cards_avail - 1:
-        renderables.append(Text(
-            f"   … {len(rows) - (first + cards_avail - 1) + 1} more below "
-            "(wheel / PgDn)\n", style="grey35"))
-    return Panel(Group(title, *renderables), box=box.ROUNDED,
-                 border_style=panel_border(theme, t))
-    return Panel(out, box=box.ROUNDED, border_style=theme_color(theme, t, light=0.40))
+    # scroll window: only render 'avail' rows around the selection
+    sc = window(app, "playlists", avail, total)
+    first = max(0, sc)  # index of first playlist to show (0 = Liked)
+    for v_idx in range(first, min(total, first + avail)):
+        if v_idx == 0:
+            add_row(0, "Liked Songs", "your collection · ∞ tracks",
+                    "demo:liked", v_idx - first, is_liked=True)
+        else:
+            pl = rows[v_idx - 1]
+            add_row(v_idx, pl.name,
+                    f"by {pl.owner or 'spotify'} · {pl.count} tracks",
+                    pl.image_url or f"demo:pl_{pl.name}", v_idx - first)
+    if total > first + avail:
+        out.append(f"   … {total - first - avail} more below (wheel / PgDn)\n",
+                   style="grey35")
+    return Panel(out, box=box.ROUNDED, border_style=panel_border(theme, t))
 
 
 def render_devices(app, width: int, height: int, x0: int, y0: int) -> Panel:

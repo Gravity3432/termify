@@ -501,6 +501,15 @@ class App:
 
     def _click_select(self, z) -> None:
         view, idx = z["view"], z["index"]
+        if view == "playlists":
+            # single click opens the playlist (consistent with the sidebar)
+            self.sel["playlists"] = idx
+            rows = self.rows.get("playlists", [])
+            if idx == 0:
+                self.open_liked()
+            elif 0 < idx <= len(rows):
+                self.open_playlist(rows[idx - 1])
+            return
         if view != self.view:
             self.goto(view)
             self.sel[view] = idx
