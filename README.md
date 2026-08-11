@@ -62,10 +62,17 @@ fun to look at.
 
 ## ⚠️ Requirements
 
+Good news: **no packages to install by hand** — the installer does that
+automatically. What you need depends on how you launch:
+
+| How you run it | Needs Python? | Manual packages? |
+|----------------|---------------|------------------|
+| `install.bat` → `run.bat` | ✅ Python 3.10+ (installed once) | ❌ none — auto |
+| `Termify.exe` (build once) | ❌ no Python at all | ❌ none |
+
 - **Spotify Premium.** Spotify enforces this server-side for *any* third-party
   playback. Termify is an unofficial, personal-use client.
-- **Python 3.10+**
-- **macOS / Linux:** one audio package for sound:
+- **macOS / Linux:** one audio package for sound (one-time, package-manager):
   - Debian/Ubuntu: `sudo apt install libportaudio2`
   - macOS: `brew install portaudio`
 
