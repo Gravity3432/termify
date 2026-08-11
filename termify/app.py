@@ -64,6 +64,7 @@ class App:
         self.cfg = cfg
         self.demo = demo
         self.theme = cfg.get("theme", "aurora")
+        self.layout = cfg.get("layout", "revamp")  # "revamp" | "classic"
         self._t0 = time.monotonic()
         self.boot_until = self._t0 + 4.2  # JTMB splash; any key cuts it short
 
@@ -431,6 +432,8 @@ class App:
                 self._drag_zone = z
             elif kind == "nav":
                 self.goto(z["view"])
+            elif kind == "sidebar":
+                self._sidebar_click(z["index"])
             elif kind == "btn":
                 a = z.get("action")
                 if a == "toggle":
@@ -507,6 +510,15 @@ class App:
             self.action_enter()  # double-click = play / open
         else:
             self._last_click = (view, idx, now)
+
+    def _sidebar_click(self, index: int) -> None:
+        """Click a playlist in the left sidebar → open it (0 = Liked Songs)."""
+        self.sel["playlists"] = index
+        rows = self.rows.get("playlists", [])
+        if index == 0:
+            self.open_liked()
+        elif 0 < index <= len(rows):
+            self.open_playlist(rows[index - 1])
 
     def _set_volume_at(self, z, x: int) -> None:
         ratio = max(0.0, min(1.0, (x - z["x"]) / max(1, z["w"] - 1)))
@@ -690,6 +702,9 @@ class App:
             return
         if ch == "t":
             self.cycle_theme()
+            return
+        if ch == "]":
+            self.cycle_layout()
             return
         # ---- media transport (run against the engine in the pool)
         if ch == K_SPACE:
@@ -1194,6 +1209,11 @@ class App:
         self.theme = order[(i + 1) % len(order)]
         self.cfg["theme"] = self.theme
         self.toast(f"theme: {self.theme}")
+
+    def cycle_layout(self) -> None:
+        self.layout = "classic" if self.layout == "revamp" else "revamp"
+        self.cfg["layout"] = self.layout
+        self.toast(f"layout: {self.layout}", 4)
 
     def action_enter(self) -> None:
         view = self.view

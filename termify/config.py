@@ -25,6 +25,7 @@ SCOPES = (
 DEFAULTS: Dict[str, Any] = {
     "client_id": "",
     "theme": "aurora",
+    "layout": "revamp",       # revamp | classic
     "device_name": "Termify",
     "volume": 60,
     "quality": "high",          # normal | high | very_high  (audio quality of the embedded player)
@@ -33,7 +34,11 @@ DEFAULTS: Dict[str, Any] = {
     "prebuffer_ms": 250,        # start-of-track cushion (can't be 0 - physics)
 }
 
-ORDERED_THEMES = ["aurora", "sunset", "ocean", "candy", "vampire", "mono"]
+ORDERED_THEMES = [
+    "aurora", "sunset", "ocean", "candy", "vampire", "mono",
+    "chroma", "rainbow", "neon", "synthwave", "toxic", "inferno",
+    "ice", "gold", "plasma",
+]
 
 
 def load_config() -> Dict[str, Any]:

@@ -1,2 +1,2 @@
-__version__ = "0.4.0"  # 0.4.0: global media keys, two date sorts, sidebar playlist drawer, hi-res cover
+__version__ = "0.5.0"  # 0.5.0: revamp layout option + 15 themes + big playlist covers
 APP_NAME = "Termify"

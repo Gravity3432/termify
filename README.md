@@ -125,7 +125,8 @@ bottom of the screen.
 | `1`–`8` | Jump to view |
 | 🎵 media keys | play/pause, next, prev on your keyboard (global, optional) |
 | `u` | Queue |
-| `t` | Cycle theme |
+| `t` | Cycle theme (15 total, incl. rainbow chroma / neon / synthwave / plasma…) |
+| `]` | Toggle layout: **revamp** (tab bar + playlist sidebar) ↔ **classic** (original) |
 | `M` | Diagnostics (mouse + last key) |
 | `?` | Help overlay |
 | `q` | Quit |
