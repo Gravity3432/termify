@@ -17,14 +17,34 @@ from .models import Snapshot, Track
 from .stats import fmt_ms
 
 # ------------------------------------------------------------------ themes
-# (base hue, hue span to sweep through, sweep period in seconds)
+# tuple = classic sweep (base hue, hue span to sweep through, period in sec)
+# dict  = richer theme; `mode: "rainbow"` cycles the full hue wheel forever,
+#         `pulse` makes highlights breathe, sat/light override the defaults.
 THEMES = {
-    "aurora": (130, 150, 26.0),
-    "sunset": (350, 65, 20.0),
-    "ocean": (170, 75, 22.0),
-    "candy": (275, 70, 17.0),
+    # -- the classic originals -------------------------------------------
+    "aurora":  (130, 150, 26.0),
+    "sunset":  (350, 65, 20.0),
+    "ocean":   (170, 75, 22.0),
+    "candy":   (275, 70, 17.0),
     "vampire": (330, 40, 15.0),  # night-violet draining into blood red
-    "mono": (158, 0, 9999.0),
+    "mono":    (158, 0, 9999.0),
+
+    # -- the bold maximalist additions -----------------------------------
+    "chroma":   {"mode": "rainbow", "speed": 14.0, "sat": 0.95, "light": 0.68},
+    "rainbow":  {"mode": "rainbow", "speed": 26.0, "sat": 1.00, "light": 0.66},
+    "neon":     {"mode": "rainbow", "speed": 20.0, "sat": 1.00, "light": 0.70,
+                 "pulse": True},
+    "synthwave": {"base": 285, "span": 75, "period": 14.0, "pulse": True,
+                  "sat": 1.0, "light": 0.66},   # magenta->cyan synth 80s
+    "toxic":    {"mode": "rainbow", "speed": 11.0, "sat": 1.0, "light": 0.60},
+    "inferno":  {"base": 0, "span": 55, "period": 9.0, "sat": 1.0,
+                 "light": 0.62, "pulse": True},  # flames
+    "ice":      {"base": 195, "span": 60, "period": 18.0, "sat": 0.75,
+                 "light": 0.66},
+    "gold":     {"base": 45, "span": 30, "period": 20.0, "sat": 0.95,
+                 "light": 0.62},
+    "plasma":   {"base": 320, "span": 60, "period": 12.0, "sat": 1.0,
+                 "light": 0.60, "pulse": True},
 }
 
 BIG_LOGO = [
@@ -203,14 +223,51 @@ def theme_params(name: str):
 
 def theme_color(theme: str, t: float, phase: float = 0.0,
                 light: float = 0.62, sat: float = 0.80) -> str:
-    base, span, period = theme_params(theme)
-    if span == 0:
-        hue = base
+    """Animated color for a theme.
+
+    Themes can be a tuple `(base, span, period)` (classic sweep) or a dict with
+    extras: `mode: 'rainbow'` cycles the full hue wheel forever, and `pulse`
+    oscillates the lightness so highlights breathe.
+    """
+    p = theme_params(theme)
+    if isinstance(p, tuple):
+        base, span, period = p
+        if span == 0:
+            hue = base
+        else:
+            w = 0.5 + 0.5 * math.sin(2 * math.pi * (t / period) + phase)
+            hue = base + span * w
+        hue %= 360
     else:
-        w = 0.5 + 0.5 * math.sin(2 * math.pi * (t / period) + phase)
-        hue = base + span * w
+        base = p.get("base", 130)
+        if p.get("mode") == "rainbow":
+            speed = p.get("speed", 18.0)
+            hue = (t * speed + phase * 40 + base) % 360
+        else:
+            span = p.get("span", 70)
+            period = p.get("period", 22.0)
+            w = 0.5 + 0.5 * math.sin(2 * math.pi * (t / period) + phase)
+            hue = (base + span * w) % 360
+        if p.get("pulse"):
+            light = light * (0.82 + 0.18 * math.sin(t * 4.0 + phase * 2))
+        sat = p.get("sat", sat)
+        light = p.get("light", light)
+    light = max(0.0, min(1.0, light))
+    sat = max(0.0, min(1.0, sat))
     r, g, b = colorsys.hls_to_rgb((hue % 360) / 360.0, light, sat)
     return f"#{int(r * 255):02x}{int(g * 255):02x}{int(b * 255):02x}"
+
+
+def sel_accent(theme: str, t: float, light: float = 0.58) -> str:
+    """Pulsing selection background - bolder & alive."""
+    l = light + 0.10 * math.sin(t * 4.5)
+    return theme_color(theme, t, light=max(0.45, min(0.8, l)), sat=0.9)
+
+
+def panel_border(theme: str, t: float, light: float = 0.55) -> str:
+    """A bolder, breathing border color for the maximalist look."""
+    l = light + 0.12 * math.sin(t * 3.2)
+    return theme_color(theme, t, light=max(0.4, min(0.85, l)), sat=0.92)
 
 
 def gradient_text(s: str, theme: str, t: float, step: float = 0.23,
@@ -510,6 +567,140 @@ def render_nav(app, x0: int, y0: int, height: int) -> Panel:
     return Panel(out, box=box.ROUNDED, border_style="grey27", padding=(0, 1))
 
 
+def render_header_revamp(app, width: int) -> Panel:
+    """New compact animated header: living equalizer logo + wave wordmark."""
+    theme, t = app.theme, app.t()
+    out = Text()
+    eq = "▁▂▃▄▅▆▇█"
+    bar_count = 14
+    for i in range(bar_count):
+        v = abs(math.sin(t * 2.6 + i * 0.75)) * 0.7 + abs(math.sin(t * 3.3 - i * 0.45)) * 0.3
+        idx = min(7, int(v * 8))
+        out.append(eq[idx], style=theme_color(theme, t, phase=i * 0.35,
+                                              light=0.5 + 0.35 * v, sat=0.9))
+    out.append("  ", style="")
+    for i in range(3):
+        out.append("♥", style=theme_color(theme, t, phase=i * 0.9 + t * 2.5, light=0.75))
+    out.append("\n")
+    word = "T E R M I F Y"
+    for i, c in enumerate(word):
+        w = 0.5 + 0.5 * math.sin(t * 2.0 + i * 0.55)
+        out.append(c, style=f"bold {theme_color(theme, t, phase=i * 0.5, light=0.62 + 0.28 * w, sat=0.95)}")
+    out.append("\n")
+    from rich.columns import Columns
+    right = Text()
+    right.append("  ♪ " + app.engine.me_name + "\n", style="bold white")
+    right.append("  ", style="")
+    for i, c in enumerate(theme):
+        right.append(c, style=theme_color(theme, t, phase=i * 0.6, light=0.7))
+    right.append("\n", style="")
+    right.append("  " + TAGLINE + "\n", style="grey40")
+    right.append("  by ", style="grey40")
+    right.append("@johnthemailboy", style=f"bold {theme_color(theme, t, phase=1.7)}")
+    content = Columns([out, right], expand=True, padding=(0, 2))
+    return Panel(content, box=box.ROUNDED, border_style=panel_border(theme, t),
+                 padding=(0, 1))
+
+
+TAB_ITEMS = [
+    ("home", "🏠", "Home"),
+    ("search", "🔍", "Search"),
+    ("playlists", "📁", "Playlists"),
+    ("liked", "♥", "Liked"),
+    ("library", "📊", "Library"),
+    ("devices", "📡", "Devices"),
+    ("queue", "🎵", "Queue"),
+    ("lyrics", "🎤", "Lyrics"),
+]
+
+
+def render_tabbar(app, width: int, x0: int, y0: int) -> Panel:
+    """Navigation as an animated tab bar (revamp layout)."""
+    theme, t = app.theme, app.t()
+    active = {
+        "playlist_tracks": "playlists",
+        "artist": "search",
+        "album": "search",
+    }.get(app.view, app.view)
+    out = Text()
+    n = len(TAB_ITEMS)
+    inner = width - 4
+    per = max(8, inner // n)
+    sel = 0
+    for idx, (key, icon, label) in enumerate(TAB_ITEMS):
+        is_active = active == key
+        cell = icon + " " + label
+        cell = truncate(cell, per - 2)
+        app.add_zone(x0 + 1 + idx * per, y0, per, 1, type="nav", view=key)
+        if is_active:
+            sel = idx
+            accent = sel_accent(theme, t)
+            out.append(" " + cell.ljust(per - 2) + " ",
+                       style=f"bold black on {accent}")
+        else:
+            pulse = 0.5 + 0.2 * math.sin(t * 3 + idx * 1.3)
+            out.append(" " + cell.ljust(per - 2) + " ",
+                       style=theme_color(theme, t, phase=idx * 0.8, light=pulse))
+    out.append("\n")
+    pos = sel * per + 1
+    underline = " " * pos + "▲" + " " * (inner - pos - 1)
+    for i, c in enumerate(underline):
+        if c == "▲":
+            out.append("▲", style=theme_color(theme, t, light=0.8))
+        else:
+            out.append(c, style="grey23")
+    return Panel(out, box=box.ROUNDED, border_style=panel_border(theme, t),
+                 padding=(0, 1))
+
+
+def render_nav_revamp(app, x0: int, y0: int, height: int) -> Panel:
+    """Left sidebar = your playlists (revamp layout)."""
+    theme, t = app.theme, app.t()
+    out = Text()
+    out.append(" PLAYLISTS\n", style=f"bold {theme_color(theme, t, light=0.6)}")
+    out.append("─" * 20 + "\n", style="grey27")
+    rows = app.rows.get("playlists", [])
+    if app.loading.get("playlists"):
+        out.append(" loading…\n", style=theme_color(theme, t, light=0.55 + 0.2 * math.sin(t * 5)))
+    elif not rows:
+        out.append(" (none yet)\n", style="grey35")
+    avail = max(2, height - 9)
+    sel_pl = max(0, app.sel["playlists"] - 1)
+    sc = app.scroll["playlists"]
+    if sel_pl < sc:
+        sc = sel_pl
+    if sel_pl >= sc + avail:
+        sc = sel_pl - avail + 1
+    sc = max(0, min(sc, max(0, len(rows) - avail)))
+    app.scroll["playlists"] = sc
+    accent = sel_accent(theme, t)
+    app.add_zone(x0 + 1, y0 + 3, 20, 1, type="sidebar", index=0)
+    if app.sel["playlists"] == 0:
+        out.append(" ❯ ♥ Liked Songs\n", style=f"bold black on {accent}")
+    else:
+        out.append("   ♥ Liked Songs\n", style="grey70")
+    for i in range(sc, min(len(rows), sc + avail)):
+        pl = rows[i]
+        view_idx = i + 1
+        app.add_zone(x0 + 1, y0 + 4 + (i - sc), 20, 1,
+                     type="sidebar", index=view_idx)
+        sel = app.sel["playlists"] == view_idx
+        label = truncate(pl.name, 18)
+        if sel:
+            out.append(f" ❯ {label.ljust(18)}\n", style=f"bold black on {accent}")
+        else:
+            out.append(f"   {label.ljust(18)}\n", style="grey70")
+    if len(rows) > sc + avail:
+        out.append(f"   …{len(rows) - sc - avail} more\n", style="grey35")
+    out.append("\n")
+    dev = truncate(app.snap.device_label, 18)
+    if dev:
+        out.append("♪ " + dev + "\n", style=theme_color(theme, t, light=0.5))
+    out.append("[enter] open · [a] play\n", style="grey35")
+    return Panel(out, box=box.ROUNDED, border_style=panel_border(theme, t),
+                 padding=(0, 1))
+
+
 def status_pip(app) -> Text:
     snap = app.snap
     theme, t = app.theme, app.t()
@@ -770,38 +961,100 @@ def playlist_card(name: str, owner: str, count: int, idx: int,
 
 
 def render_playlists(app, width: int, height: int, x0: int, y0: int) -> Panel:
+    """Big playlist cards with real cover art, laid out in a grid."""
+    from rich.columns import Columns
+    from rich.console import Group
+
     theme, t = app.theme, app.t()
     rows = app.rows.get("playlists", [])
-    cards_avail = max(2, (height - 6) // 2)
-    sc_eff = window(app, "playlists", cards_avail, len(rows) + 1)
-    scroll = max(0, sc_eff - 1) if app.sel["playlists"] > 0 else sc_eff
+    inner = max(20, width - 4)
+    card_w = 20          # char width of each card
+    cover_h = 8          # rows of cover art per card
+    cols = max(1, min(4, inner // (card_w + 2)))
+    cards_avail = max(1, (height - 8) // (cover_h + 2))
+    total = len(rows) + 1
     sel = app.sel["playlists"]
-    out = Text()
-    out.append_text(list_title(
-        "PLAYLISTS", len(rows) + 1,
-        f"· {sel + 1}/{len(rows) + 1} · [enter] open · [a] play ", theme, t))
-    out.append("\n" + "─" * (width - 4) + "\n", style="grey27")
-    ly = 2
+
+    title = list_title(
+        "PLAYLISTS", total,
+        f"· {sel + 1}/{total} · [enter] open · [a] play ", theme, t)
+    title.append("\n" + "─" * (width - 4) + "\n", style="grey27")
+
     if app.loading.get("playlists"):
-        out.append(" loading…\n",
-                   style=theme_color(theme, t, light=0.55 + 0.2 * math.sin(t * 5)))
-    app.add_zone(x0, y0 + ly, width - 2, 2,
-                 type="select", view="playlists", index=0)
-    a, b = playlist_card("Liked Songs", "your collection", "∞", 0,
-                         sel == 0, width - 2, theme, t, pinned=True)
-    out.append_text(a); out.append("\n"); out.append_text(b); out.append("\n")
-    ly += 2
-    for i in range(scroll, min(len(rows), scroll + cards_avail - 1)):
-        pl = rows[i]
-        app.add_zone(x0, y0 + ly, width - 2, 2,
-                     type="select", view="playlists", index=i + 1)
-        a, b = playlist_card(pl.name, f"by {pl.owner or 'spotify'}", pl.count,
-                             i + 1, (i + 1) == sel, width - 2, theme, t)
-        out.append_text(a); out.append("\n"); out.append_text(b); out.append("\n")
-        ly += 2
-    if len(rows) > scroll + cards_avail - 1:
-        out.append(f"   … {len(rows) - scroll - cards_avail + 1} more below "
-                   "(wheel / PgDn)\n", style="grey35")
+        title.append(" loading…\n",
+                     style=theme_color(theme, t, light=0.55 + 0.2 * math.sin(t * 5)))
+        return Panel(title, box=box.ROUNDED, border_style=panel_border(theme, t))
+
+    def art_for_pl(name, img_url, selected):
+        art = app.art_for(img_url, card_w, cover_h)
+        if art is None:
+            top, low = _thumb_colors(name)
+            art = Text()
+            for r in range(cover_h):
+                art.append(("▄" * card_w) if r < cover_h // 2 else ("▀" * card_w),
+                           style=top if r < cover_h // 2 else low)
+                art.append("\n")
+        if selected:
+            accent = sel_accent(theme, t)
+            boxed = Text()
+            boxed.append("╔" + "═" * card_w + "╗\n", style=accent)
+            for line in art.plain.split("\n"):
+                if line:
+                    boxed.append("║", style=accent)
+                    boxed.append(line.ljust(card_w), style=accent)
+                    boxed.append("║\n", style=accent)
+            boxed.append("╚" + "═" * card_w + "╝", style=accent)
+            return boxed
+        return art
+
+    cards = [("Liked Songs", "your collection · ∞", "demo:liked")]
+    for pl in rows:
+        cards.append((pl.name, f"by {pl.owner or 'spotify'} · {pl.count}",
+                      pl.image_url or f"demo:pl_{pl.name}"))
+
+    first = max(0, sel - cards_avail + 1)
+    shown = cards[first:first + cards_avail]
+
+    renderables = []
+    row_y = y0 + 2  # content starts below title + divider
+    for start in range(0, len(shown), cols):
+        chunk = shown[start:start + cols]
+        art_blocks = []
+        cap_blocks = []
+        for ci, (name, meta, img) in enumerate(chunk):
+            idx_in_list = first + start + ci
+            is_sel = (sel == idx_in_list)
+            art_blocks.append(art_for_pl(name, img, is_sel))
+            cap = Text()
+            cap.append(truncate(name, card_w).ljust(card_w),
+                       style="bold white" if not is_sel
+                       else f"bold black on {sel_accent(theme, t)}")
+            cap.append("\n")
+            cap.append(truncate(meta, card_w).ljust(card_w),
+                       style="grey50" if not is_sel
+                       else f"black on {sel_accent(theme, t)}")
+            cap_blocks.append(cap)
+        heights = [a.plain.count("\n") for a in art_blocks]
+        hmax = max(heights) if heights else cover_h
+        for art, h in zip(art_blocks, heights):
+            if h < hmax:
+                art.append("\n" * (hmax - h))
+        renderables.append(Columns(art_blocks, expand=False, padding=(0, 2)))
+        renderables.append(Text("\n"))
+        renderables.append(Columns(cap_blocks, expand=False, padding=(0, 2)))
+        renderables.append(Text("\n"))
+        for ci in range(len(chunk)):
+            idx_in_list = first + start + ci
+            app.add_zone(x0 + 1 + ci * (card_w + 2), row_y,
+                         card_w + 2, hmax + 3, type="select",
+                         view="playlists", index=idx_in_list)
+        row_y += hmax + 3
+    if len(rows) > first + cards_avail - 1:
+        renderables.append(Text(
+            f"   … {len(rows) - (first + cards_avail - 1) + 1} more below "
+            "(wheel / PgDn)\n", style="grey35"))
+    return Panel(Group(title, *renderables), box=box.ROUNDED,
+                 border_style=panel_border(theme, t))
     return Panel(out, box=box.ROUNDED, border_style=theme_color(theme, t, light=0.40))
 
 
@@ -1097,7 +1350,8 @@ HELP_LINES = [
     ("resume",  "R resumes your last session where you left it (saved on quit)"),
     ("stats",   "S = listening stats + 'your week in music' report (stored locally)"),
     ("devices", "m opens devices · enter picks one (remote mode)"),
-    ("look",    "t cycles color themes (aurora/sunset/ocean/candy/vampire 🦇/mono)"),
+    ("look",    "t cycles 15 themes (aurora/sunset/ocean/candy/vampire 🦇/mono/chroma/rainbow/neon/synthwave/toxic/inferno/ice/gold/plasma)"),
+    ("layout",  "] toggles the layout: revamp (tab bar + playlist sidebar) ↔ classic (original nav)"),
 ]
 
 
@@ -1251,15 +1505,20 @@ def build(app, width: int, height: int):
             ),
             box=box.ROUNDED,
         )
+    layout = getattr(app, "layout", "revamp")
+    if layout == "classic":
+        return _build_classic(app, width, height)
+    return _build_revamp(app, width, height)
+
+
+def _build_classic(app, width: int, height: int):
+    """The original layout: big header + left NAVIGATE sidebar + footer."""
     big_logo = height >= (34 if app.theme == "vampire" else 30)
     header_h = (len(banner_for(app.theme)) + 3) if big_logo else 4
     footer_h = 4
     body_h = height - header_h - footer_h
-
-    # content origins (panel borders + padding accounted for)
-    mx0, my0 = NAV_W + 1, header_h + 1   # main panel content
-    fy0 = height - footer_h + 1          # footer content, first line
-
+    mx0, my0 = NAV_W + 1, header_h + 1
+    fy0 = height - footer_h + 1
     root = Layout()
     root.split_column(
         Layout(name="header", size=header_h),
@@ -1268,51 +1527,79 @@ def build(app, width: int, height: int):
     )
     root["header"].update(render_header(app, width, big_logo))
     root["footer"].update(render_footer(app, width, 2, fy0))
-
-    main_w = width - NAV_W
-    if app.help_visible:
-        main = render_help(app, main_w, body_h)
-    elif app.picker is not None:
-        main = render_picker(app, main_w, body_h, mx0, my0)
-    elif app.show_lyrics or app.view == "lyrics":
-        main = render_lyrics(app, main_w, body_h)
-    elif app.show_stats:
-        main = render_stats(app, main_w, body_h)
-    elif app.view == "home":
-        main = render_home(app, main_w, body_h, mx0, my0)
-    elif app.view == "search":
-        main = render_search(app, main_w, body_h, mx0, my0)
-    elif app.view == "playlists":
-        main = render_playlists(app, main_w, body_h, mx0, my0)
-    elif app.view == "playlist_tracks":
-        pl = app.current_pl
-        main = render_track_list(
-            app, "playlist_tracks",
-            f"PLAYLIST ▸ {pl.name if pl else '?'}", app.rows.get("playlist_tracks", []),
-            main_w, body_h, mx0, my0)
-    elif app.view == "queue":
-        main = render_queue(app, main_w, body_h, mx0, my0)
-    elif app.view == "liked":
-        main = render_track_list(app, "liked", "LIKED SONGS",
-                                 app.rows.get("liked", []), main_w, body_h, mx0, my0)
-    elif app.view == "artist":
-        ar = app.current_artist
-        main = render_track_list(
-            app, "artist", f"ARTIST ▸ {ar.name if ar else '?'} · TRACKS",
-            app.rows.get("artist", []), main_w, body_h, mx0, my0)
-    elif app.view == "album":
-        al = app.current_album
-        main = render_track_list(
-            app, "album", f"ALBUM ▸ {al.name if al else '?'} · {al.year if al else ''}",
-            app.rows.get("album", []), main_w, body_h, mx0, my0)
-    elif app.view == "library":
-        main = render_library(app, main_w, body_h, mx0, my0)
-    elif app.view == "devices":
-        main = render_devices(app, main_w, body_h, mx0, my0)
-    else:
-        main = Panel(Text("???"))
+    main = _render_main(app, width - NAV_W, body_h, mx0, my0)
     root["body"].split_row(
         Layout(render_nav(app, 1, my0, body_h), name="nav", size=NAV_W),
         Layout(main, name="main"),
     )
     return root
+
+
+def _build_revamp(app, width: int, height: int):
+    """The new layout: animated header + bottom tab bar + playlist sidebar."""
+    header_h = 4
+    tab_h = 3
+    footer_h = 5
+    body_h = height - header_h - tab_h - footer_h
+    mx0, my0 = NAV_W + 1, header_h + 1
+    fy0 = header_h + tab_h + 2
+    root = Layout()
+    root.split_column(
+        Layout(name="header", size=header_h),
+        Layout(name="tabbar", size=tab_h),
+        Layout(name="body"),
+        Layout(name="footer", size=footer_h),
+    )
+    root["header"].update(render_header_revamp(app, width))
+    root["tabbar"].update(render_tabbar(app, width, 2, header_h + 1))
+    root["footer"].update(render_footer(app, width, 2, fy0))
+    main = _render_main(app, width - NAV_W, body_h, mx0, my0)
+    root["body"].split_row(
+        Layout(render_nav_revamp(app, 1, my0, body_h), name="nav", size=NAV_W),
+        Layout(main, name="main"),
+    )
+    return root
+
+
+def _render_main(app, main_w: int, body_h: int, mx0: int, my0: int):
+    """Shared main-panel rendering, used by both layouts."""
+    if app.help_visible:
+        return render_help(app, main_w, body_h)
+    if app.picker is not None:
+        return render_picker(app, main_w, body_h, mx0, my0)
+    if app.show_lyrics or app.view == "lyrics":
+        return render_lyrics(app, main_w, body_h)
+    if app.show_stats:
+        return render_stats(app, main_w, body_h)
+    if app.view == "home":
+        return render_home(app, main_w, body_h, mx0, my0)
+    if app.view == "search":
+        return render_search(app, main_w, body_h, mx0, my0)
+    if app.view == "playlists":
+        return render_playlists(app, main_w, body_h, mx0, my0)
+    if app.view == "playlist_tracks":
+        pl = app.current_pl
+        return render_track_list(
+            app, "playlist_tracks",
+            f"PLAYLIST ▸ {pl.name if pl else '?'}", app.rows.get("playlist_tracks", []),
+            main_w, body_h, mx0, my0)
+    if app.view == "queue":
+        return render_queue(app, main_w, body_h, mx0, my0)
+    if app.view == "liked":
+        return render_track_list(app, "liked", "LIKED SONGS",
+                                 app.rows.get("liked", []), main_w, body_h, mx0, my0)
+    if app.view == "artist":
+        ar = app.current_artist
+        return render_track_list(
+            app, "artist", f"ARTIST ▸ {ar.name if ar else '?'} · TRACKS",
+            app.rows.get("artist", []), main_w, body_h, mx0, my0)
+    if app.view == "album":
+        al = app.current_album
+        return render_track_list(
+            app, "album", f"ALBUM ▸ {al.name if al else '?'} · {al.year if al else ''}",
+            app.rows.get("album", []), main_w, body_h, mx0, my0)
+    if app.view == "library":
+        return render_library(app, main_w, body_h, mx0, my0)
+    if app.view == "devices":
+        return render_devices(app, main_w, body_h, mx0, my0)
+    return Panel(Text("???"))
