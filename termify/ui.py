@@ -778,7 +778,9 @@ def render_home(app, width: int, height: int, x0: int, y0: int) -> Panel:
     progress_ratio = (snap.position_ms / snap.duration_ms) if snap.duration_ms else 0.0
     prog = bar(inner_w, progress_ratio, theme, t)
     prog_row = top_h + 1
-    app.add_zone(x0, y0 + prog_row, inner_w, 1, type="seek")
+    # cover the bar row AND the timing row below it, so clicking the visible
+    # "click bar to seek" prompt works (not just the thin bar itself).
+    app.add_zone(x0, y0 + prog_row, inner_w, 2, type="seek")
     timing = Text()
     pre = f" {snap.position_text} "
     post = f"{snap.duration_text} "
