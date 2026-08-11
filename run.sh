@@ -2,20 +2,25 @@
 # ============================================================
 #  Termify launcher for macOS / Linux
 #  made with heart by @johnthemailboy
+#  First run uses the friendly installer, then launches.
 # ============================================================
 cd "$(dirname "$0")" || exit 1
 
+# first run -> friendly installer (if present)
+if [ ! -d .venv ]; then
+  if [ -f install.py ]; then
+    python3 install.py || python install.py || {
+      echo
+      echo "  [termify] Setup didn't finish. Run:  python3 install.py"
+      exit 1
+    }
+  fi
+fi
+
 if [ ! -d .venv ]; then
   echo
-  echo "  [termify] First run - creating virtual environment..."
-  python3 -m venv .venv || {
-    echo
-    echo "  [termify] Could not create the virtual environment."
-    echo "  Make sure python3 is 3.10+ (you may need python3-venv)."
-    exit 1
-  }
-  ./.venv/bin/pip install --quiet --upgrade pip || exit 1
-  ./.venv/bin/pip install --quiet -r requirements.txt || exit 1
+  echo "  [termify] Setup hasn't finished yet. Run:  python3 install.py"
+  exit 1
 fi
 
 exec ./.venv/bin/python -m termify "$@"

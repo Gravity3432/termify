@@ -1,2 +1,2 @@
-__version__ = "0.5.0"  # 0.5.0: revamp layout option + 15 themes + big playlist covers
+__version__ = "0.5.1"  # 0.5.1: friendly installer (progress bars) + .exe build option
 APP_NAME = "Termify"

@@ -73,11 +73,17 @@ fun to look at.
 
 ## 🚀 Quick start
 
-**Windows** — double-click **`run.bat`**. It builds the environment on first run.
+**Windows — easiest:** double-click **`install.bat`**. A friendly setup walks
+you through it with live progress bars (everything stays in this folder — safe
+to delete anytime to uninstall). Then double-click **`run.bat`** to open the app.
+
+> You can also just double-click `run.bat` and it runs the installer for you on
+> first launch automatically.
 
 **macOS / Linux**
 ```bash
-./run.sh
+python3 install.py        # one-time friendly setup
+./run.sh                  # open the app
 ```
 
 **Manual**
@@ -88,6 +94,18 @@ pip install -r requirements.txt
 python -m termify --demo         # offline demo — no login needed
 python -m termify                # the real thing
 ```
+
+### 🪟 Optional: build a Windows `.exe` (pin it to the taskbar)
+Want Termify to feel like a real app instead of a script? Build a standalone
+`Termify.exe` on your Windows machine:
+
+1. Run `install.bat` once (so the environment exists).
+2. Double-click **`build_exe.bat`** — it produces `dist\Termify.exe`.
+3. Right-click `Termify.exe` → **Pin to taskbar** (or Send to → Desktop).
+
+> The exe is built on *your* PC (PyInstaller doesn't cross-compile). It works
+> well, but if audio ever acts up from the exe, `run.bat` is the rock-solid
+> fallback — both give you the same app.
 
 ---
 
@@ -142,8 +160,12 @@ progress/volume bars, right-click a track to add it to a playlist.
 termify/
 ├── termify/          # the app package (.py files)
 ├── requirements.txt  # Python dependencies
+├── install.bat       # friendly Windows installer (progress bars)
+├── install.py        # the installer itself (any OS)
 ├── run.bat           # Windows launcher
 ├── run.sh            # macOS/Linux launcher
+├── build_exe.bat     # build a Windows .exe (PyInstaller)
+├── termify.spec      # PyInstaller config for the .exe
 ├── docs/             # screenshots
 └── termify.zip       # release zip of the app package
 ```
