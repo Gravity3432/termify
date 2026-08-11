@@ -509,6 +509,7 @@ def render_nav(app, x0: int, y0: int, height: int) -> Panel:
         ("devices", "6", "Devices"),
         ("queue", "7", "Queue ♫"),
         ("lyrics", "8", "Lyrics 🎤"),
+        ("settings", "9", "Settings ⚙"),
     ]
     out = Text()
     out.append(" NAVIGATE\n", style="bold grey50")
@@ -611,6 +612,7 @@ TAB_ITEMS = [
     ("devices", "📡", "Devices"),
     ("queue", "🎵", "Queue"),
     ("lyrics", "🎤", "Lyrics"),
+    ("settings", "⚙", "Settings"),
 ]
 
 
@@ -674,7 +676,7 @@ def render_nav_revamp(app, x0: int, y0: int, height: int) -> Panel:
     sc = max(0, min(sc, max(0, len(rows) - avail)))
     app.scroll["playlists"] = sc
     accent = sel_accent(theme, t)
-    app.add_zone(x0 + 1, y0 + 3, 20, 1, type="sidebar", index=0)
+    app.add_zone(x0 + 1, y0 + 2, 20, 1, type="sidebar", index=0)
     if app.sel["playlists"] == 0:
         out.append(" ❯ ♥ Liked Songs\n", style=f"bold black on {accent}")
     else:
@@ -682,7 +684,7 @@ def render_nav_revamp(app, x0: int, y0: int, height: int) -> Panel:
     for i in range(sc, min(len(rows), sc + avail)):
         pl = rows[i]
         view_idx = i + 1
-        app.add_zone(x0 + 1, y0 + 4 + (i - sc), 20, 1,
+        app.add_zone(x0 + 1, y0 + 3 + (i - sc), 20, 1,
                      type="sidebar", index=view_idx)
         sel = app.sel["playlists"] == view_idx
         label = truncate(pl.name, 18)
@@ -1091,6 +1093,42 @@ def render_devices(app, width: int, height: int, x0: int, y0: int) -> Panel:
         out.append("\n lyrics for this track live in their own view\n", style="grey42")
         out.append(" press L or [8] to open the lyrics panel 🎤\n", style="grey37")
     return Panel(out, box=box.ROUNDED, border_style=theme_color(theme, t, light=0.40))
+
+
+def render_settings(app, width: int, height: int, x0: int, y0: int) -> Panel:
+    """Settings: switch layout, see info. Pressing the row toggles it."""
+    theme, t = app.theme, app.t()
+    out = Text()
+    out.append_text(list_title("SETTINGS", 1, " [enter] toggle · click a row ", theme, t))
+    out.append("\n" + "─" * (width - 4) + "\n", style="grey27")
+
+    # ---- layout toggle row ----
+    app.add_zone(x0, y0 + 2, width - 2, 1, type="btn", action="layout")
+    cur = "REVAMP (tab bar + playlist sidebar)" if app.layout == "revamp" else "CLASSIC (original)"
+    row = Text()
+    row.append(" ❯ ", style=theme_color(theme, t, light=0.6))
+    row.append("Layout:  ", style="bold white")
+    row.append(cur, style=theme_color(theme, t, light=0.6))
+    row.append("\n", style="")
+    row.append("    (switch between the two interfaces)  [enter]\n", style="grey45")
+    out.append_text(row)
+    out.append("\n", style="")
+
+    # ---- theme hint row ----
+    app.add_zone(x0, y0 + 5, width - 2, 1, type="btn", action="theme")
+    row2 = Text()
+    row2.append(" ❯ ", style=theme_color(theme, t, light=0.6))
+    row2.append("Theme:  ", style="bold white")
+    for i, ch in enumerate(app.theme):
+        row2.append(ch, style=theme_color(theme, t, phase=i * 0.6, light=0.7))
+    row2.append("\n", style="")
+    row2.append("    (cycle the 15 color themes)  [t]\n", style="grey45")
+    out.append_text(row2)
+
+    out.append("\n", style="")
+    out.append(" made with ♥ by @johnthemailboy\n", style="grey40")
+    out.append(" termify is an unofficial, personal-use client.\n", style="grey35")
+    return Panel(out, box=box.ROUNDED, border_style=panel_border(theme, t))
 
 
 def render_search(app, width: int, height: int, x0: int, y0: int) -> Panel:
@@ -1541,8 +1579,12 @@ def _build_revamp(app, width: int, height: int):
     tab_h = 3
     footer_h = 5
     body_h = height - header_h - tab_h - footer_h
-    mx0, my0 = NAV_W + 1, header_h + 1
-    fy0 = header_h + tab_h + 2
+    # content origins MUST match where panels actually render:
+    # body starts after header + tabbar (panel border + 1 content row)
+    mx0 = NAV_W + 1
+    my0 = header_h + tab_h + 1
+    # footer is pinned to the BOTTOM of the screen, not right after the body
+    fy0 = height - footer_h + 1
     root = Layout()
     root.split_column(
         Layout(name="header", size=header_h),
@@ -1602,4 +1644,6 @@ def _render_main(app, main_w: int, body_h: int, mx0: int, my0: int):
         return render_library(app, main_w, body_h, mx0, my0)
     if app.view == "devices":
         return render_devices(app, main_w, body_h, mx0, my0)
+    if app.view == "settings":
+        return render_settings(app, main_w, body_h, mx0, my0)
     return Panel(Text("???"))

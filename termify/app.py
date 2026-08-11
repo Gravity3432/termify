@@ -34,7 +34,7 @@ from .stats import Stats, fmt_ms
 
 FPS = 20
 
-VIEW_ORDER = ["home", "search", "playlists", "liked", "library", "devices", "queue", "lyrics"]
+VIEW_ORDER = ["home", "search", "playlists", "liked", "library", "devices", "queue", "lyrics", "settings"]
 
 # Spotify-style sort cycle for track lists (None = original order)
 SORT_MODES = [
@@ -448,6 +448,10 @@ class App:
                                        {"off": "off", "context": "all", "track": "one"})
                 elif a == "shuffle":
                     self._call_toggled(self.engine.shuffle_toggle, "shuffle")
+                elif a == "layout":
+                    self.cycle_layout()
+                elif a == "theme":
+                    self.cycle_theme()
             elif kind == "queue":
                 i = z["index"]
                 self.toast("jumping in queue…")
