@@ -22,7 +22,7 @@ hiddenimports += ["sounddevice", "numpy", "PIL", "rich", "readchar", "requests"]
 
 
 a = Analysis(
-    ["termify/__main__.py"],
+    ["entry.py"],
     pathex=[],
     binaries=[],
     datas=datas,

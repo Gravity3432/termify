@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/screenshot-home.svg" alt="Termify — home screen" width="820">
+  <img src="docs/termify.gif" alt="Termify in action" width="820">
 </p>
 
 <h1 align="center">🎧 Termify</h1>
@@ -54,9 +54,9 @@ fun to look at.
 
 ## 📸 Screenshots
 
-| Playlists | Queue | Stats |
-|-----------|-------|-------|
-| <img src="docs/screenshot-playlists.svg" width="400"> | <img src="docs/screenshot-queue.svg" width="400"> | <img src="docs/screenshot-stats.svg" width="400"> |
+| Revamp layout | Classic layout | Playlists |
+|---------------|----------------|-----------|
+| <img src="docs/revamp-home.svg" width="400"> | <img src="docs/screenshot-home.svg" width="400"> | <img src="docs/revamp2-playlists.svg" width="400"> |
 
 ---
 
@@ -87,7 +87,13 @@ to delete anytime to uninstall). Then double-click **`run.bat`** to open the app
 > You can also just double-click `run.bat` and it runs the installer for you on
 > first launch automatically.
 
-**macOS / Linux**
+**One command (macOS / Linux / WSL):**
+```bash
+pipx install git+https://github.com/Gravity3432/termify.git
+termify            # a `termify` command is now on your PATH
+```
+
+**macOS / Linux (no pipx):**
 ```bash
 python3 install.py        # one-time friendly setup
 ./run.sh                  # open the app
