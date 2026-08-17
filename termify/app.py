@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import queue
 import threading
 import time
 from collections import defaultdict, deque
@@ -30,7 +29,7 @@ from .input_layer import (
 from .models import Snapshot, Track
 from .catalog import Catalog
 from .media_keys import MediaKeyController
-from .stats import Stats, fmt_ms
+from .stats import Stats
 
 FPS = 20
 

@@ -10,10 +10,9 @@ it ever gets corrupted - a bad file just means stats reset, never a crash).
 from __future__ import annotations
 
 import json
-import time
 from datetime import date, timedelta
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Tuple
 
 from .models import Track
 
