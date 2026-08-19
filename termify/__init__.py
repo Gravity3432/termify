@@ -1,2 +1,2 @@
-__version__ = "0.6.1"  # 0.6.1: automatic installer
+__version__ = "0.6.2"  # 0.6.2: tidy release zip
 APP_NAME = "Termify"
