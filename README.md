@@ -81,16 +81,19 @@ automatically. What you need depends on how you launch:
 
 ## 🚀 Quick start
 
-**Windows — make the app (`Termify.exe`):** double-click **`build.bat`**. It
-sets everything up, downloads what it needs, and leaves you a ready-to-run
-**`dist\Termify.exe`**. Copy that one file anywhere — double-click it, pin it
-to the taskbar — it just runs, no Python needed.
+**The easy way — the installer does everything:**
+- **Windows:** double-click **`run.bat`** (or `install.py`). It automatically
+  finds/gets Python, sets up a private environment, and installs every library
+  with built-in retries — nothing to install by hand, then it opens the app.
+- **macOS / Linux:** run `python3 install.py`, then `./run.sh`.
 
-> `build.bat` does the whole thing in one click: private environment →
-> install dependencies → build the exe. Takes a few minutes the first time.
+> The installer handles Python too (on Windows it can download a portable one),
+> creates a private env inside this folder, and prefers prebuilt binaries so
+> packages don't try to compile. Delete the folder to uninstall.
 
-**Windows — run straight from source:** double-click **`run.bat`**. It sets up
-and opens Termify in the terminal (auto-installs on first run).
+**Make a standalone app (`Termify.exe`):** double-click **`build.bat`** — it
+builds a ready-to-run `dist\Termify.exe` you can copy anywhere and pin to the
+taskbar (no Python needed on the machine that runs it).
 
 **One command (macOS / Linux / WSL):**
 ```bash

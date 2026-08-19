@@ -1,187 +1,208 @@
 #!/usr/bin/env python3
-"""Termify installer — a friendly, safe first-run setup.
+"""Termify installer — does EVERYTHING for you, nothing manual.
 
-What it does:
-  1. Tells you exactly what's about to happen (and that nothing scary is).
-  2. Finds a Python 3.10+ interpreter.
-  3. Creates a local virtual environment inside THIS folder only.
-  4. Installs the required packages, with live progress.
-  5. Tells you it's done and how to launch.
+What it handles automatically:
+  1. Finds Python (or, on Windows, can download a portable one for you).
+  2. Creates a private environment inside this folder (nothing touches
+     your system; delete this folder to uninstall).
+  3. Installs every package the app needs, with automatic retries and
+     prebuilt binary wheels — so a flaky download can't kill the install.
+  4. Tells you exactly how to launch when done.
 
-Safety notes shown to the user:
-  * Everything stays in this folder (.venv) — nothing touches your system.
-  * No admin rights needed.
-  * You can delete this folder any time to uninstall.
-  * Your Spotify login is only stored on your machine in ~/.termify.
-
-This script only uses the standard library, so it runs anywhere with Python.
+It only uses the Python standard library, so it can run anywhere.
 """
 import os
+import re
 import shutil
 import subprocess
 import sys
 import time
+import urllib.request
 
 APP = "Termify"
-STEP_TOTAL = 4
+CORE_DEPS = ["spotipy", "librespot", "rich", "readchar", "requests"]
+# binary/heavier ones installed with --prefer-binary so nothing compiles
+BINARY_DEPS = ["numpy", "Pillow", "av", "sounddevice"]
+OPTIONAL_DEPS = ["keyboard"]  # global media buttons; skip if it fails
 
 
 # ---------------------------------------------------------------- helpers
-def _clear_line():
-    print("\r" + " " * 60 + "\r", end="", flush=True)
-
-
-def spinner(msg):
-    """Run a quick animated spinner for a blocking call."""
+def _spinner(msg):
     chars = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
     i = 0
     while True:
-        _clear_line()
-        print(f"  {msg} {chars[i % len(chars)]}", end="", flush=True)
+        sys.stdout.write("\r  " + msg + " " + chars[i % len(chars)] + "   ")
+        sys.stdout.flush()
         i += 1
         yield
 
 
-def step(n, title):
-    print(f"\n  [{n}/{STEP_TOTAL}] {title}")
-    print("  " + "-" * 40)
-
-
 def run(cmd, label, cwd=None):
-    """Run a command with a spinner; returns True on success."""
-    print()
-    anim = spinner(f"{label}...")
-    next(anim)
+    """Run a command with a spinner; returns (ok, output)."""
+    anim = _spinner(f"{label}...")
     try:
-        proc = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True)
-        ok = proc.returncode == 0
-    except Exception:
-        ok = False
+        next(anim)
+    except StopIteration:
+        pass
+    try:
+        p = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True,
+                           timeout=600)
+        ok = p.returncode == 0
+        out = (p.stdout or "") + (p.stderr or "")
+    except Exception as e:
+        ok, out = False, str(e)
     try:
         anim.close()
     except Exception:
         pass
-    _clear_line()
-    if ok:
-        print(f"  \u2713 {label} done")
-    else:
-        print(f"  \u2717 {label} failed")
-    return ok
+    sys.stdout.write("\r" + " " * 70 + "\r")
+    print(f"  {'\u2713' if ok else '\u2717'} {label}")
+    return ok, out
 
 
 def find_python():
-    """Return an interpreter string, or None."""
-    candidates = []
+    cands = []
     if sys.platform == "win32":
-        # try the py launcher, then python
-        for name in ("py -3", "python", "python3"):
+        for name in (["py", "python", "python3"]):
             try:
-                r = subprocess.run(name.split(), capture_output=True, text=True)
+                r = subprocess.run([name, "-V"], capture_output=True, text=True)
                 if r.returncode == 0:
-                    candidates.append(name.split()[0])
+                    cands.append(name)
             except Exception:
                 pass
-        # prefer py
-        for c in candidates:
-            if c == "py":
-                return c
-        return candidates[0] if candidates else None
-    else:
-        for name in ("python3", "python"):
-            if shutil.which(name):
-                return name
+        return cands[0] if cands else None
+    for name in ("python3", "python"):
+        if shutil.which(name):
+            return name
     return None
 
 
-def check_version(py):
+def version_ok(py):
     try:
-        r = subprocess.run(f"{py} --version".split(), capture_output=True, text=True)
-        out = (r.stdout or r.stderr).strip()
-        # "Python 3.12.4" -> 3, 12
-        import re
-        m = re.search(r"(\d+)\.(\d+)", out)
+        r = subprocess.run([py, "-V"], capture_output=True, text=True)
+        m = re.search(r"(\d+)\.(\d+)", (r.stdout or r.stderr).strip())
         if m:
             major, minor = int(m.group(1)), int(m.group(2))
-            if major > 3 or (major == 3 and minor >= 10):
-                return True
+            return major > 3 or (major == 3 and minor >= 10)
     except Exception:
         pass
     return False
 
 
-# ---------------------------------------------------------------- main
+def download_portable_python(where):
+    """Windows: fetch a portable CPython (has pip + venv) if none is installed."""
+    print("  No Python found — downloading a portable one for you (~30 MB)...")
+    ver = "3.12.4"
+    tag = "20240615"
+    base = "https://github.com/astral-sh/python-build-standalone/releases/download"
+    url = (f"{base}/{tag}/cpython-{ver}+{tag}-x86_64-pc-windows-msvc-"
+           f"install_only.tar.gz")
+    dest = os.path.join(where, "_python")
+    os.makedirs(dest, exist_ok=True)
+    tarball = os.path.join(where, "_python.tar.gz")
+    try:
+        urllib.request.urlretrieve(url, tarball)
+        import tarfile
+        with tarfile.open(tarball, "r:gz") as tf:
+            tf.extractall(dest)
+        os.remove(tarball)
+        # find python.exe inside
+        for root, _dirs, files in os.walk(dest):
+            if "python.exe" in files:
+                return os.path.join(root, "python.exe")
+    except Exception as e:
+        print(f"  Could not download portable Python: {e}")
+    return None
+
+
+# ---------------------------------------------------------------- install
+def pip_install(py_venv, packages, label):
+    """Install a set of packages with retries + prefer-binary."""
+    attempts = 3
+    for i in range(attempts):
+        print(f"  [{i + 1}/{attempts}] {label}...")
+        cmd = [py_venv, "-m", "pip", "install", "--prefer-binary",
+               "--disable-pip-version-check", "-q"] + packages
+        ok, _out = run(cmd, f"installing {label}")
+        if ok:
+            return True
+        if i < attempts - 1:
+            print("    (a download hiccuped — retrying automatically)")
+            time.sleep(2)
+    return False
+
+
 def main():
     print()
-    print("  " + "=" * 42)
-    print(f"   \u266a  {APP}  —  first-time setup")
-    print("  " + "=" * 42)
+    print("  " + "=" * 44)
+    print(f"   \u266a  {APP}  —  automatic setup")
+    print("  " + "=" * 44)
+    print("  I'll handle everything: Python, environment, and all")
+    print("  the libraries Termify needs. Nothing else to install by hand.")
+    print("  Everything stays in this folder — delete it to uninstall.")
     print()
-    print("  Hi! This one-time setup is quick and safe:")
-    print("   \u2022 Everything installs into THIS folder only (.venv)")
-    print("   \u2022 No admin rights needed, nothing added to your system")
-    print("   \u2022 Your Spotify login stays on YOUR machine (~/.termify)")
-    print("   \u2022 To uninstall later, just delete this folder")
-    print()
-    print("  Getting things ready...", flush=True)
-
-    # 1 - find python
-    step(1, "Checking for Python")
-    py = find_python()
-    if not py:
-        print("  \u2717 No Python found.")
-        print("  Please install Python 3.10+ from https://python.org")
-        print("  (on Windows, tick \"Add python.exe to PATH\"), then run this again.")
-        input("\n  Press Enter to close...")
-        return 1
-    if not check_version(py):
-        print(f"  \u2717 Found '{py}' but it's not Python 3.10+.")
-        print("  Please install Python 3.10+ from https://python.org")
-        input("\n  Press Enter to close...")
-        return 1
-    print(f"  \u2713 Using {py}")
 
     base = os.path.dirname(os.path.abspath(__file__))
-    venv_py = os.path.join(base, ".venv", "Scripts", "python.exe") if sys.platform == "win32" \
-        else os.path.join(base, ".venv", "bin", "python")
+    py = find_python()
 
-    # 2 - create venv
-    step(2, "Creating a private environment (a minute or two)")
+    # --- 1. Python ---
+    print("  [1/4] Making sure Python is available...")
+    if py and version_ok(py):
+        print(f"  \u2713 Using your Python: {py}")
+    else:
+        if sys.platform == "win32":
+            py = download_portable_python(base)
+        if not py:
+            print("  \u2717 No working Python 3.10+ found.")
+            print("  Install Python 3.10+ from https://python.org, then run this again.")
+            input("\n  Press Enter to close...")
+            return 1
+        if not version_ok(py):
+            print(f"  \u2717 {py} is not Python 3.10+.")
+            input("\n  Press Enter to close...")
+            return 1
+
+    # --- 2. environment ---
+    print("  [2/4] Creating a private environment (a minute)...")
+    venv_dir = os.path.join(base, ".venv")
+    venv_py = (os.path.join(venv_dir, "Scripts", "python.exe")
+               if sys.platform == "win32"
+               else os.path.join(venv_dir, "bin", "python"))
     if not os.path.exists(venv_py):
-        if not run([py, "-m", "venv", ".venv"], "Creating environment"):
-            print("  \u2717 Could not create the virtual environment.")
+        ok, _ = run([py, "-m", "venv", ".venv"], "creating environment")
+        if not ok:
+            print("  \u2717 Could not create the environment.")
             input("\n  Press Enter to close...")
             return 1
     else:
         print("  \u2713 Environment already exists — reusing it")
 
-    # 3 - install packages
-    step(3, "Installing the app's packages")
-    print("  This is the big step — it downloads the libraries Termify")
-    print("  needs. It can take a few minutes on a slow connection.")
-    # upgrade pip
-    run([venv_py, "-m", "pip", "install", "--upgrade", "pip"],
-        "Upgrading pip")
-    # install requirements with a progress indicator
-    reqs = os.path.join(base, "requirements.txt")
-    if not run([venv_py, "-m", "pip", "install", "-r", reqs], "Installing packages"):
-        print()
-        print("  \u2717 Some packages failed to install.")
-        print("  Check your internet connection, then run this again.")
-        print("  (A broken install is safe — just rerun and it retries.)")
+    # --- 3. packages ---
+    print("  [3/4] Installing libraries (downloads, with auto-retry)...")
+    print("        This can take a few minutes on a slow connection.")
+    ok, _ = run([venv_py, "-m", "pip", "install", "--upgrade", "pip",
+                 "--disable-pip-version-check", "-q"], "upgrading pip")
+    if not pip_install(venv_py, CORE_DEPS, "core libraries"):
+        print("  \u2717 Core libraries failed after retries. Check internet, retry.")
         input("\n  Press Enter to close...")
         return 1
+    if not pip_install(venv_py, BINARY_DEPS, "audio/image libraries"):
+        print("  \u2717 Audio libraries failed after retries.")
+        print("  If it mentions 'av' or 'sounddevice', your Python build may be")
+        print("  the issue — installing Python 3.12 from python.org usually fixes it.")
+        input("\n  Press Enter to close...")
+        return 1
+    pip_install(venv_py, OPTIONAL_DEPS, "optional media keys (skippable)")
 
-    # 4 - done
-    step(4, "All done!")
+    # --- 4. done ---
+    print("  [4/4] Done!")
     print("  \u2713 Termify is installed and ready.")
     print()
     if sys.platform == "win32":
-        print("  To open it: double-click  run.bat   (or type: run.bat)")
+        print("  To open it:  double-click  run.bat")
     else:
         print("  To open it:  ./run.sh")
-    print()
-    print("  First launch asks you to log in to your Spotify account.")
-    print("  (Requires Spotify Premium for playback.)")
+    print("  First launch asks you to log in to Spotify (Premium required).")
     print()
     input("  Press Enter to close...")
     return 0
