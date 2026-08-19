@@ -1,2 +1,2 @@
-__version__ = "0.6.0"  # 0.6.0: one-click build.bat -> ready-to-run Termify.exe
+__version__ = "0.6.1"  # 0.6.1: automatic installer
 APP_NAME = "Termify"
