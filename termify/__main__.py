@@ -157,8 +157,6 @@ def main() -> None:
     )
     parser.add_argument("--demo", action="store_true",
                         help="offline demo with fake music (no account needed)")
-    parser.add_argument("--gui", action="store_true",
-                        help="open the windowed (GUI) player instead of the terminal")
     parser.add_argument("--remote", action="store_true",
                         help="skip the embedded player; control other spotify devices")
     parser.add_argument("--force-remote", action="store_true", help=argparse.SUPPRESS)
@@ -204,16 +202,6 @@ def main() -> None:
         print("  try:  python -m termify --setup     to redo the connection")
         sys.exit(1)
 
-    if args.gui:
-        from .gui import run_gui
-        try:
-            run_gui(engine, cfg)
-        except Exception as exc:  # noqa: BLE001
-            print(f"  GUI could not open: {exc}")
-            print("  falling back to the terminal app…")
-            from .app import App
-            App(engine, cfg).run()
-        return
 
     from .app import App
 
