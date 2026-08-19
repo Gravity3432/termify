@@ -61,7 +61,13 @@ def ensure_client(cfg) -> None:
 
     if not cfg.get("client_id"):
         banner()
-        cfg["client_id"] = auth.prompt_client_id()
+        try:
+            cfg["client_id"] = auth.prompt_client_id()
+        except (EOFError, KeyboardInterrupt):
+            print("\n  No Client ID entered - can't connect to Spotify.")
+            print("  Run this again and paste your Client ID when asked.")
+            print("  (See README for how to get one - it's free and takes 2 minutes.)")
+            raise
         if not cfg["client_id"]:
             print("  no client id - can't continue.")
             sys.exit(1)

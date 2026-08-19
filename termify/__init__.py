@@ -1,2 +1,2 @@
-__version__ = "0.6.2"  # 0.6.2: tidy release zip
+__version__ = "0.6.3"  # 0.6.3: run.bat never auto-closes, auto login setup
 APP_NAME = "Termify"
