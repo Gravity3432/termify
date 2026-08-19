@@ -1,2 +1,2 @@
-__version__ = "0.6.5"  # 0.6.5: click snapping fixes sidebar offset
+__version__ = "0.7.0"  # 0.7.0: windowed GUI app
 APP_NAME = "Termify"
