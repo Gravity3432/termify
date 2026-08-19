@@ -656,7 +656,7 @@ def render_tabbar(app, width: int, x0: int, y0: int) -> Panel:
 
 
 def render_nav_revamp(app, x0: int, y0: int, height: int) -> Panel:
-    """Left sidebar = your playlists (revamp layout)."""
+    """Left sidebar = your playlists (revamp layout), with tiny cover art."""
     theme, t = app.theme, app.t()
     out = Text()
     out.append(" PLAYLISTS\n", style=f"bold {theme_color(theme, t, light=0.6)}")
@@ -676,22 +676,41 @@ def render_nav_revamp(app, x0: int, y0: int, height: int) -> Panel:
     sc = max(0, min(sc, max(0, len(rows) - avail)))
     app.scroll["playlists"] = sc
     accent = sel_accent(theme, t)
+
+    def mini_cover_styled(name, is_liked=False):
+        """Return (text, color) for a tiny 2-char cover tile."""
+        if is_liked:
+            return "♥♥", theme_color(theme, t, light=0.7)
+        top, _low = _thumb_colors(name)
+        return "██", top
+
+    # pinned Liked Songs
     app.add_zone(x0 + 1, y0 + 2, 20, 1, type="sidebar", index=0)
+    cover_txt, cover_col = mini_cover_styled("Liked Songs", True)
     if app.sel["playlists"] == 0:
-        out.append(" ❯ ♥ Liked Songs\n", style=f"bold black on {accent}")
+        out.append(f" ❯ ", style=f"bold black on {accent}")
+        out.append(cover_txt, style=cover_col if False else f"black on {accent}")
+        out.append(" Liked Songs\n", style=f"bold black on {accent}")
     else:
-        out.append("   ♥ Liked Songs\n", style="grey70")
+        out.append("   ", style="")
+        out.append(cover_txt, style=cover_col)
+        out.append(" Liked Songs\n", style="grey70")
     for i in range(sc, min(len(rows), sc + avail)):
         pl = rows[i]
         view_idx = i + 1
         app.add_zone(x0 + 1, y0 + 3 + (i - sc), 20, 1,
                      type="sidebar", index=view_idx)
         sel = app.sel["playlists"] == view_idx
-        label = truncate(pl.name, 18)
+        label = truncate(pl.name, 15)
+        cover_txt, cover_col = mini_cover_styled(pl.name)
         if sel:
-            out.append(f" ❯ {label.ljust(18)}\n", style=f"bold black on {accent}")
+            out.append(f" ❯ ", style=f"bold black on {accent}")
+            out.append(cover_txt, style=f"black on {accent}")
+            out.append(f" {label.ljust(15)}\n", style=f"bold black on {accent}")
         else:
-            out.append(f"   {label.ljust(18)}\n", style="grey70")
+            out.append("   ", style="")
+            out.append(cover_txt, style=cover_col)
+            out.append(f" {label.ljust(15)}\n", style="grey70")
     if len(rows) > sc + avail:
         out.append(f"   …{len(rows) - sc - avail} more\n", style="grey35")
     out.append("\n")

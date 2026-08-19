@@ -1,2 +1,2 @@
-__version__ = "0.6.3"  # 0.6.3: run.bat never auto-closes, auto login setup
+__version__ = "0.6.4"  # 0.6.4: sidebar cover art
 APP_NAME = "Termify"
