@@ -384,10 +384,24 @@ class App:
         if w > 0 and h > 0:
             self.zones.append({"x": x, "y": y, "w": w, "h": h, **action})
 
-    def find_zone(self, x: int, y: int):
+    def find_zone(self, x: int, y: int, tol: int = 3):
+        """Return the zone under (x, y). If none matches exactly, snap to the
+        nearest zone in the same column within `tol` rows - this absorbs the
+        small vertical coordinate offset some terminals (Windows) introduce,
+        so a click lands on the row you actually pointed at, not one above."""
         for z in reversed(self.zones):
             if z["x"] <= x < z["x"] + z["w"] and z["y"] <= y < z["y"] + z["h"]:
                 return z
+        if tol:
+            best = None
+            best_d = tol + 1
+            for z in self.zones:
+                if z["x"] <= x < z["x"] + z["w"]:
+                    d = abs(z["y"] - y)
+                    if d <= tol and d < best_d:
+                        best, best_d = z, d
+            if best is not None:
+                return best
         return None
 
     def _input_loop(self) -> None:
