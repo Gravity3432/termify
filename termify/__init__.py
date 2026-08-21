@@ -1,2 +1,2 @@
-__version__ = "0.7.2"  # clean terminal app
+__version__ = "0.7.3"  # clean terminal app
 APP_NAME = "Termify"

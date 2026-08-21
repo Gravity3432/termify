@@ -664,9 +664,10 @@ def render_nav_revamp(app, x0: int, y0: int, height: int) -> Panel:
     renders it. Mouse-wheel over the sidebar scrolls the list.
     """
     theme, t = app.theme, app.t()
-    # card geometry
-    cover_h = 2                      # rows tall each cover is
-    cover_w = 12                     # cells wide each cover is
+    # card geometry — covers are SQUARE: 1 char wide ≈ 2px, 1 row tall = 2px,
+    # so a square cover needs cover_w ≈ 2 × cover_h rows.
+    cover_w = 8                       # cells wide (-> 8 px wide)
+    cover_h = 4                       # rows tall  (-> 8 px tall) => square
     card_h = cover_h + 1             # cover rows + one meta line
     # the zone for playlist card n sits at y0 + HEADER + n*card_h
     HEADER_ROWS = 2                  # "PLAYLISTS" + divider
@@ -1589,7 +1590,7 @@ def render_footer(app, width: int, x0: int, y0: int) -> Panel:
 
 # ------------------------------------------------------------------ root
 
-NAV_W = 36
+NAV_W = 40
 
 
 def build(app, width: int, height: int):
