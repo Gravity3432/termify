@@ -666,8 +666,8 @@ def render_nav_revamp(app, x0: int, y0: int, height: int) -> Panel:
     theme, t = app.theme, app.t()
     # card geometry — covers are SQUARE: 1 char wide ≈ 2px, 1 row tall = 2px,
     # so a square cover needs cover_w ≈ 2 × cover_h rows.
-    cover_w = 8                       # cells wide (-> 8 px wide)
-    cover_h = 4                       # rows tall  (-> 8 px tall) => square
+    cover_w = 14                      # cells wide (-> 14 px wide)
+    cover_h = 7                       # rows tall  (-> 14 px tall) => square
     card_h = cover_h + 1             # cover rows + one meta line
     # the zone for playlist card n sits at y0 + HEADER + n*card_h
     HEADER_ROWS = 2                  # "PLAYLISTS" + divider
@@ -1042,8 +1042,8 @@ def render_playlists(app, width: int, height: int, x0: int, y0: int) -> Panel:
     total = len(rows) + 1  # include pinned Liked Songs
     sel = app.sel["playlists"]
     inner = max(20, width - 4)
-    thumb_w = 10
-    cover_h = 4
+    thumb_w = 18
+    cover_h = 9
     row_h = cover_h + 1   # cover rows + one meta line
 
     out = Text()
@@ -1594,7 +1594,7 @@ def render_footer(app, width: int, x0: int, y0: int) -> Panel:
 
 # ------------------------------------------------------------------ root
 
-NAV_W = 40
+NAV_W = 52
 
 
 def build(app, width: int, height: int):
