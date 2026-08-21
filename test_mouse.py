@@ -21,8 +21,10 @@ def make_app_with_sidebar():
     ]
     h.find_zone = App.find_zone.__get__(h)
     h.mouse_y_offset = 0
+    h.mouse_y_scale = 1.0
     def _find(x, y, tol=3):
-        return h.find_zone(x, y + h.mouse_y_offset, tol)
+        cy = y * h.mouse_y_scale + h.mouse_y_offset
+        return h.find_zone(x, int(round(cy)), tol)
     h._find_zone = _find
     return h
 
@@ -51,6 +53,20 @@ def test_offset_correction():
     print("PASS mouse_y_offset shifts click resolution by the right amount")
 
 
+def test_scale_correction():
+    # A growing offset (drift lower-down) needs scale, not just shift.
+    h = make_app_with_sidebar()
+    h.mouse_y_scale = 1.0
+    # with scale=1 and no offset, exact rows are exact
+    assert h._find_zone(5, 10)["index"] == 0
+    assert h._find_zone(5, 11)["index"] == 1
+    # scale < 1 pulls low clicks up: raw y=13 -> row ~11.7 -> row 12
+    h.mouse_y_scale = 0.9
+    # raw 12 -> 10.8 -> 11 (index 1)
+    assert h._find_zone(5, 12)["index"] == 1
+    print("PASS mouse_y_scale shrinks low-click resolution")
+
+
 def test_out_of_range_returns_none():
     h = make_app_with_sidebar()
     assert h.find_zone(5, 50, 3) is None
@@ -61,6 +77,7 @@ def test_out_of_range_returns_none():
 def run_all():
     test_exact_rows()
     test_offset_correction()
+    test_scale_correction()
     test_out_of_range_returns_none()
     print("\nALL MOUSE TESTS PASSED ✅")
 

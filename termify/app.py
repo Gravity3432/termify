@@ -119,6 +119,7 @@ class App:
         self.mouse_debug = False
         self._last_mouse: tuple = (0, 0, 0, "")
         self.mouse_y_offset = int(cfg.get("mouse_y_offset", 0))
+        self.mouse_y_scale = float(cfg.get("mouse_y_scale", 1.0))
 
         # lyrics / picker / sleep timer / session resume / stats
         self.show_stats = False
@@ -434,9 +435,15 @@ class App:
 
     # -- mouse ----------------------------------------------------------
     def _find_zone(self, x: int, y: int, tol: int = 3):
-        """find_zone with the terminal's vertical offset applied, so a click
-        that reports N rows off still resolves to the row the user pointed at."""
-        return self.find_zone(x, y + self.mouse_y_offset, tol)
+        """Resolve a click to the row the user actually pointed at.
+
+        Applies two corrections for terminal coordinate quirks:
+          mouse_y_scale — scales Y (for a drift that grows the further down
+                          the screen you click; Windows console quirk),
+          mouse_y_offset — a constant shift on top.
+        """
+        cy = y * self.mouse_y_scale + self.mouse_y_offset
+        return self.find_zone(x, int(round(cy)), tol)
 
     def on_mouse(self, code: int, x: int, y: int, pressed: bool) -> None:
         if self.boot_active():
@@ -778,6 +785,18 @@ class App:
             self.mouse_y_offset -= 1
             self.cfg["mouse_y_offset"] = self.mouse_y_offset
             self.toast(f"mouse y offset {self.mouse_y_offset:+d}  (to go forward, press ; )")
+            return
+        if ch == "<":
+            # scale mouse Y down: drift gets worse lower on screen (shrink)
+            self.mouse_y_scale = max(0.5, round(self.mouse_y_scale - 0.02, 3))
+            self.cfg["mouse_y_scale"] = self.mouse_y_scale
+            self.toast(f"mouse y scale {self.mouse_y_scale:.2f}  (> = grow · < = shrink)")
+            return
+        if ch == ">":
+            # scale mouse Y up: drift gets worse lower on screen (grow)
+            self.mouse_y_scale = min(1.5, round(self.mouse_y_scale + 0.02, 3))
+            self.cfg["mouse_y_scale"] = self.mouse_y_scale
+            self.toast(f"mouse y scale {self.mouse_y_scale:.2f}  (> = grow · < = shrink)")
             return
         if ch == "t":
             self.cycle_theme()

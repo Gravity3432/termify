@@ -1380,7 +1380,7 @@ def render_stats(app, width: int, height: int) -> Panel:
 
 HELP_LINES = [
     ("views",   "1…7 / tab / ↑↓ j/k + enter  (or click them)"),
-    ("mouse",   "click seek bar to scrub · click volume · click rows/nav · wheel scrolls · right-click a track = add to playlist · if clicks land on the wrong row, press ; (nudge +1) or ' (nudge −1) to fix it"),
+    ("mouse",   "click seek bar to scrub · click volume · click rows/nav · wheel scrolls · right-click a track = add to playlist · if clicks land on the wrong row, press ;/' to shift, </> to scale the row offset"),
     ("play",    "space = pause/resume · n next · b prev · ←/→ seek 5 s · ,/. seek 30 s"),
     ("volume",  "+ / − (5 % steps) · click/drag the footer bar"),
     ("modes",   "s shuffle · r repeat off→all→one"),
@@ -1532,8 +1532,9 @@ def render_footer(app, width: int, x0: int, y0: int) -> Panel:
     else:
         line2.append(truncate(KEY_LEGEND, width - 2), style="grey42")
         off = getattr(app, "mouse_y_offset", 0)
-        if off:
-            line2.append(f"  ·  mouse y {off:+d}  (; up · ' down)",
+        sc = getattr(app, "mouse_y_scale", 1.0)
+        if off or sc != 1.0:
+            line2.append(f"  ·  mouse {sc:.2f}x{off:+d}  (;/' shift · </> scale)",
                          style=f"bold {theme_color(theme, t, light=0.6)}")
     return Panel(Text.assemble(line1, "\n", line2), box=box.ROUNDED,
                  border_style=theme_color(theme, t, light=0.40), padding=(0, 1))
