@@ -690,19 +690,7 @@ def render_nav_revamp(app, x0: int, y0: int, height: int) -> Panel:
     app.scroll["playlists"] = sc
     accent = sel_accent(theme, t)
 
-    def cover_block(name, is_liked=False):
-        """A small cover-art block (top ▄ rows + bottom ▀ rows)."""
-        if is_liked:
-            top, low = "#ff5f87", "#c2244e"
-        else:
-            top, low = _thumb_colors(name)
-        lines = []
-        for r in range(cover_h):
-            glyph = "▄" if r < cover_h // 2 else "▀"
-            lines.append((glyph * cover_w, top if r < cover_h // 2 else low))
-        return lines
-
-    def card(row_off, view_idx, name, is_liked=False):
+    def card(row_off, view_idx, name, img_url="", is_liked=False):
         """Emit one playlist card + its click zone. Returns lines appended."""
         sel = app.sel["playlists"] == view_idx
         sel_style = f"bold black on {accent}" if sel else ""
@@ -710,24 +698,55 @@ def render_nav_revamp(app, x0: int, y0: int, height: int) -> Panel:
         zone_y = y0 + HEADER_ROWS + row_off * card_h
         app.add_zone(x0 + 1, zone_y, NAV_W - 2, card_h,
                      type="sidebar", index=view_idx)
-        cover = cover_block(name, is_liked)
+
+        # real cover art (rich Text) or a colored placeholder
+        art_txt = None
+        if not is_liked and img_url:
+            try:
+                art_txt = app.art_for(img_url, cover_w, cover_h)
+            except Exception:
+                art_txt = None
         name_w = max(8, NAV_W - 6 - cover_w)
         caret = "❯" if sel else " "
-        # line 0: caret + cover-top + name
-        out.append(f"{caret} ", style=f"bold {accent}" if sel else "grey30")
-        out.append(cover[0][0], style=sel_style if sel else cover[0][1])
-        out.append(" ", style="")
-        if sel:
-            out.append(truncate(name, name_w).ljust(name_w), style=sel_style)
-        else:
-            out.append(truncate(name, name_w), style="bold white")
-        out.append("\n")
-        # middle cover rows (2..cover_h-1)
-        for r in range(1, cover_h):
-            out.append("   ", style="")
-            out.append(cover[r][0], style=sel_style if sel else cover[r][1])
+
+        if art_txt is not None and art_txt.plain.strip():
+            # render the rich art, one line at a time beside the name
+            lines = art_txt.split("\n")
+            # line 0: caret + art-line0 + name
+            out.append(f"{caret} ", style=f"bold {accent}" if sel else "grey30")
+            out.append_text(lines[0] if lines else Text(" " * cover_w))
+            out.append("  ", style="")
+            if sel:
+                out.append(truncate(name, name_w).ljust(name_w), style=sel_style)
+            else:
+                out.append(truncate(name, name_w), style="bold white")
             out.append("\n")
-        # meta line (part of the card height, keeps spacing even)
+            for r in range(1, cover_h):
+                out.append("   ", style="")
+                if r < len(lines):
+                    out.append_text(lines[r])
+                else:
+                    out.append(" " * cover_w, style="")
+                out.append("\n")
+        else:
+            # fallback colored tile
+            top, low = ("#ff5f87", "#c2244e") if is_liked else _thumb_colors(name)
+            out.append(f"{caret} ", style=f"bold {accent}" if sel else "grey30")
+            for r in range(cover_h):
+                glyph = "▄" if r < cover_h // 2 else "▀"
+                st = sel_style if sel else (top if r < cover_h // 2 else low)
+                if r == 0:
+                    out.append(glyph * cover_w, style=st)
+                    out.append(" ", style="")
+                    if sel:
+                        out.append(truncate(name, name_w).ljust(name_w), style=sel_style)
+                    else:
+                        out.append(truncate(name, name_w), style="bold white")
+                else:
+                    out.append("   ", style="")
+                    out.append(glyph * cover_w, style=st)
+                out.append("\n")
+        # meta line
         meta = "Liked Songs ♥" if is_liked else f"{len(rows)} pl"
         out.append("   ", style="")
         out.append(meta.ljust(NAV_W - 6), style="grey40" if not sel else sel_style)
@@ -738,7 +757,7 @@ def render_nav_revamp(app, x0: int, y0: int, height: int) -> Panel:
     # playlists
     for i in range(sc, min(len(rows), sc + avail - 1)):
         pl = rows[i]
-        card(i - sc + 1, i + 1, pl.name)
+        card(i - sc + 1, i + 1, pl.name, pl.image_url or f"demo:pl_{pl.name}")
     if len(rows) > sc + avail - 1:
         out.append(f"   …{len(rows) - (sc + avail - 1)} more\n", style="grey35")
     out.append("\n")
