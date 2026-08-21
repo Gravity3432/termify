@@ -1531,6 +1531,10 @@ def render_footer(app, width: int, x0: int, y0: int) -> Panel:
         line2.append("   [M] close", style="grey40")
     else:
         line2.append(truncate(KEY_LEGEND, width - 2), style="grey42")
+        off = getattr(app, "mouse_y_offset", 0)
+        if off:
+            line2.append(f"  ·  mouse y {off:+d}  (; up · ' down)",
+                         style=f"bold {theme_color(theme, t, light=0.6)}")
     return Panel(Text.assemble(line1, "\n", line2), box=box.ROUNDED,
                  border_style=theme_color(theme, t, light=0.40), padding=(0, 1))
 
