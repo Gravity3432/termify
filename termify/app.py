@@ -30,6 +30,7 @@ from .models import Snapshot, Track
 from .catalog import Catalog
 from .media_keys import MediaKeyController
 from .stats import Stats
+from . import sixel_art
 
 FPS = 20
 
@@ -120,6 +121,8 @@ class App:
         self._last_mouse: tuple = (0, 0, 0, "")
         self.mouse_y_offset = int(cfg.get("mouse_y_offset", 0))
         self.mouse_y_scale = float(cfg.get("mouse_y_scale", 1.0))
+        self._cover_img = None       # a real cover being shown full-screen
+        self._cover_title = ""
 
         # lyrics / picker / sleep timer / session resume / stats
         self.show_stats = False
@@ -877,6 +880,9 @@ class App:
                 return
             self.goto("lyrics")
             return
+        if ch in ("V", "v"):
+            self._view_cover()
+            return
         if ch == "Z":
             self._sleep_cycle()
             return
@@ -1072,6 +1078,62 @@ class App:
             self.toast("your engine can't edit the queue here")
             return
         self._call(lambda: qf(tr, to_end))
+
+    def _view_cover(self) -> None:
+        """Show the real cover for the current track / selected playlist.
+
+        Uses in-terminal Sixel when the terminal + library support it; the
+        Live screen is briefly suspended so the image isn't erased. Falls
+        back to opening the real image in the OS default viewer (guaranteed
+        crisp on Windows).
+        """
+        import io as _io
+        url = None
+        title = ""
+        tr = self.snap.track
+        if tr and tr.image_url:
+            url, title = tr.image_url, f"{tr.name} — {tr.artists}"
+        elif self.view == "playlists":
+            idx = self.sel["playlists"]
+            rows = self.rows.get("playlists", [])
+            if idx == 0:
+                self.toast("no single cover for Liked Songs (use a playlist)")
+                return
+            if rows and 0 < idx <= len(rows):
+                pl = rows[idx - 1]
+                url, title = pl.image_url, pl.name
+        elif self.view == "playlist_tracks" and self.current_pl:
+            url, title = self.current_pl.image_url, self.current_pl.name
+        elif getattr(self, "current_artist", None):
+            url, title = (self.current_artist.image_url, self.current_artist.name)
+        elif getattr(self, "current_album", None):
+            url, title = (self.current_album.image_url, self.current_album.name)
+        if not url:
+            self.toast("no cover to show for that yet ♪")
+            return
+        self.toast("opening cover…", 2)
+        self._pool.submit(self._view_cover_worker, url, title)
+
+    def _view_cover_worker(self, url: str, title: str) -> None:
+        try:
+            img = art.fetch_image(url, 640)
+        except Exception:
+            img = None
+        if img is None:
+            self.toast("couldn't load the cover")
+            return
+        # Show it reliably. In-terminal Sixel requires suspending the Live
+        # screen and doesn't work on every Windows setup, so the guaranteed
+        # crisp path is opening the real image in the OS viewer. We use that.
+        try:
+            from . import config
+            config.ensure_dirs()
+            p = config.ART_CACHE / "_cover_view.png"
+            img.convert("RGB").save(p)
+            sixel_art._open_in_viewer(str(p))
+            self.toast("opened cover in your image viewer ✓")
+        except Exception as e:
+            self.toast(f"couldn't open cover: {e}")
 
     def _toggle_drawer(self) -> None:
         if self.side_drawer:

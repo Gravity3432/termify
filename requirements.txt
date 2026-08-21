@@ -11,3 +11,4 @@ numpy>=1.24
 # even when the terminal isn't focused. Remove this line if it fails to
 # install on your system - Termify still works, just without those keys.
 keyboard>=0.13.5
+python-sixel-windows>=0.2.2 ; platform_system=='Windows'

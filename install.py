@@ -24,6 +24,7 @@ CORE_DEPS = ["spotipy", "librespot", "rich", "readchar", "requests"]
 # binary/heavier ones installed with --prefer-binary so nothing compiles
 BINARY_DEPS = ["numpy", "Pillow", "av", "sounddevice"]
 OPTIONAL_DEPS = ["keyboard"]  # global media buttons; skip if it fails
+OPTIONAL_DEPS += ["python-sixel-windows"]  # in-terminal real cover images; skippable (falls back to OS viewer)
 
 
 # ---------------------------------------------------------------- helpers

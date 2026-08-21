@@ -713,17 +713,19 @@ def render_nav_revamp(app, x0: int, y0: int, height: int) -> Panel:
         if art_txt is not None and art_txt.plain.strip():
             # render the rich art, one line at a time beside the name
             lines = art_txt.split("\n")
+            # the cover block occupies columns 2..(2+cover_w). Align every row.
+            cover_pad = " " * (len(caret) + 1)   # caret + one space, = the art's left edge
             # line 0: caret + art-line0 + name
             out.append(f"{caret} ", style=f"bold {accent}" if sel else "grey30")
             out.append_text(lines[0] if lines else Text(" " * cover_w))
-            out.append("  ", style="")
+            out.append(" ", style="")
             if sel:
                 out.append(truncate(name, name_w).ljust(name_w), style=sel_style)
             else:
                 out.append(truncate(name, name_w), style="bold white")
             out.append("\n")
             for r in range(1, cover_h):
-                out.append("   ", style="")
+                out.append(cover_pad, style="")
                 if r < len(lines):
                     out.append_text(lines[r])
                 else:
@@ -733,20 +735,20 @@ def render_nav_revamp(app, x0: int, y0: int, height: int) -> Panel:
             # fallback colored tile — solid FULL block so there's no gap at
             # the top (half-blocks left the upper row looking cut off).
             top, low = ("#ff5f87", "#c2244e") if is_liked else _thumb_colors(name)
+            cover_pad = " " * (len(caret) + 1)
             out.append(f"{caret} ", style=f"bold {accent}" if sel else "grey30")
             for r in range(cover_h):
                 st = sel_style if sel else (top if r < cover_h // 2 else low)
-                glyph = "█"
                 if r == 0:
-                    out.append(glyph * cover_w, style=st)
+                    out.append("█" * cover_w, style=st)
                     out.append(" ", style="")
                     if sel:
                         out.append(truncate(name, name_w).ljust(name_w), style=sel_style)
                     else:
                         out.append(truncate(name, name_w), style="bold white")
                 else:
-                    out.append("   ", style="")
-                    out.append(glyph * cover_w, style=st)
+                    out.append(cover_pad, style="")
+                    out.append("█" * cover_w, style=st)
                 out.append("\n")
         # meta line
         meta = "Liked Songs ♥" if is_liked else f"{len(rows)} pl"
@@ -1439,6 +1441,7 @@ HELP_LINES = [
     ("search",  "/ type — returns artists, albums, playlists & tracks"),
     ("sort",    "o cycles: default → oldest added → newest added → title → artist → album → duration"),
     ("playlist", "enter opens · 'a' plays whole thing · 'x' reloads · [ = sidebar playlist drawer (stays on Home)"),
+    ("cover",   "V = open the real album/playlist picture (in-terminal Sixel or your image viewer)"),
     ("edit",    "C create playlist · A add track to playlist · d remove from open one · F find duplicates"),
     ("queue",   "u or 7 = full queue view · enter/click jumps · d kicks out · N = play next · E = queue at end"),
     ("sleep",   "Z cycles the sleep timer 15→30→45→60 min→off (pauses for you)"),
