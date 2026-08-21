@@ -652,76 +652,62 @@ def render_header_revamp(app, width: int) -> Panel:
                  padding=(0, 1))
 
 
-TAB_ITEMS = [
-    ("home", "🏠", "Home"),
-    ("search", "🔍", "Search"),
-    ("playlists", "📁", "Playlists"),
-    ("liked", "♥", "Liked"),
-    ("library", "📊", "Library"),
-    ("devices", "📡", "Devices"),
-    ("queue", "🎵", "Queue"),
-    ("lyrics", "🎤", "Lyrics"),
-    ("settings", "⚙", "Settings"),
-]
 
 
-def render_tabbar(app, width: int, x0: int, y0: int) -> Panel:
-    """Navigation as an animated tab bar (revamp layout)."""
+
+def render_nav_revamp(app, x0: int, y0: int, height: int) -> Panel:
+    """Left sidebar = navigation + your playlists (revamp layout), compact.
+
+    Nav items sit on top (no top tab bar needed - it's all here), then the
+    playlists as cover-art cards. Each playlist card is one big forgiving
+    click zone, derived from the same row math that renders it. Wheel over
+    the sidebar scrolls the playlist list.
+    """
     theme, t = app.theme, app.t()
+    # --- navigation (replaces the top tab bar) ---------------------------
+    nav_items = [
+        ("home", "⌂", "Home"),
+        ("search", "🔍", "Search"),
+        ("liked", "♥", "Liked"),
+        ("library", "📊", "Library"),
+        ("devices", "📡", "Devices"),
+        ("queue", "🎵", "Queue"),
+        ("lyrics", "🎤", "Lyrics"),
+        ("settings", "⚙", "Settings"),
+    ]
     active = {
         "playlist_tracks": "playlists",
         "artist": "search",
         "album": "search",
     }.get(app.view, app.view)
     out = Text()
-    n = len(TAB_ITEMS)
-    inner = width - 4
-    per = max(8, inner // n)
-    sel = 0
-    for idx, (key, icon, label) in enumerate(TAB_ITEMS):
-        is_active = active == key
-        cell = icon + " " + label
-        cell = truncate(cell, per - 2)
-        app.add_zone(x0 + 1 + idx * per, y0, per, 1, type="nav", view=key)
-        if is_active:
-            sel = idx
-            accent = sel_accent(theme, t)
-            out.append(" " + cell.ljust(per - 2) + " ",
-                       style=f"bold black on {accent}")
+    out.append(" NAVIGATE\n", style=f"bold {theme_color(theme, t, light=0.6)}")
+    out.append("─" * (NAV_W - 4) + "\n", style="grey27")
+    nav_row = 0
+    for key, icon, label in nav_items:
+        sel_n = active == key
+        nav_y = y0 + 2 + nav_row
+        app.add_zone(x0 + 1, nav_y, NAV_W - 2, 1, type="nav", view=key)
+        if sel_n:
+            accent_n = theme_color(theme, t, light=0.55)
+            out.append(f" ❯ {icon} {label}\n", style=f"bold black on {accent_n}")
         else:
-            pulse = 0.5 + 0.2 * math.sin(t * 3 + idx * 1.3)
-            out.append(" " + cell.ljust(per - 2) + " ",
-                       style=theme_color(theme, t, phase=idx * 0.8, light=pulse))
+            out.append(f"   {icon} {label}\n",
+                       style=theme_color(theme, t, phase=nav_row * 0.5, light=0.6))
+        nav_row += 1
     out.append("\n")
-    pos = sel * per + 1
-    underline = " " * pos + "▲" + " " * (inner - pos - 1)
-    for i, c in enumerate(underline):
-        if c == "▲":
-            out.append("▲", style=theme_color(theme, t, light=0.8))
-        else:
-            out.append(c, style="grey23")
-    return Panel(out, box=box.ROUNDED, border_style=panel_border(theme, t),
-                 padding=(0, 1))
+    # rows consumed by the nav block + the blank line
+    NAV_H = 2 + len(nav_items) + 1   # label + divider + items + blank
 
-
-def render_nav_revamp(app, x0: int, y0: int, height: int) -> Panel:
-    """Left sidebar = your playlists (revamp layout), as compact cover cards.
-
-    Each playlist is a tidy 3-row card: a real cover thumbnail with the name
-    and a meta line. One click zone covers the whole card (forgiving, can't
-    drift), and every card's zone Y is computed from the same row math that
-    renders it. Mouse-wheel over the sidebar scrolls the list.
-    """
-    theme, t = app.theme, app.t()
-    # card geometry — covers are SQUARE: 1 char wide ≈ 2px, 1 row tall = 2px,
-    # so a square cover needs cover_w ≈ 2 × cover_h rows.
-    cover_w = 14                      # cells wide (-> 14 px wide)
-    cover_h = 7                       # rows tall  (-> 14 px tall) => square
+    # --- playlists as cover-art cards -------------------------------------
+    # card geometry — covers are SQUARE: 1 char wide ≈ 2px, 1 row = 2px
+    cover_w = 14
+    cover_h = 7
     card_h = cover_h + 1             # cover rows + one meta line
-    # the zone for playlist card n sits at y0 + HEADER + n*card_h
-    HEADER_ROWS = 2                  # "PLAYLISTS" + divider
+    # playlists header rows (label + divider) come after the nav block
+    PL_HEADER = 2
+    HEADER_ROWS = NAV_H + PL_HEADER  # total rows before the first card
 
-    out = Text()
     out.append(" PLAYLISTS\n", style=f"bold {theme_color(theme, t, light=0.6)}")
     out.append("─" * (NAV_W - 4) + "\n", style="grey27")
     rows = app.rows.get("playlists", [])
@@ -899,9 +885,9 @@ def render_home(app, width: int, height: int, x0: int, y0: int) -> Panel:
     prog_row = top_h + 1
     # cover the bar row AND the timing row below it, so clicking the visible
     # "click bar to seek" prompt works (not just the thin bar itself).
-    # Content starts one row/col inside the panel border, so the zone origin
-    # is (x0+1, y0+1+prog_row).
-    app.add_zone(x0 + 1, y0 + 1 + prog_row, inner_w, 2, type="seek")
+    # Measured: the bar renders at screen row y0+prog_row (content starts at
+    # y0, no extra border offset here), spanning the full inner width from x0.
+    app.add_zone(x0, y0 + prog_row, inner_w, 2, type="seek")
     timing = Text()
     pre = f" {snap.position_text} "
     post = f"{snap.duration_text} "
@@ -1541,7 +1527,6 @@ def render_footer(app, width: int, x0: int, y0: int) -> Panel:
     theme, t = app.theme, app.t()
     snap = app.snap
     toast = app.current_toast()
-    accent = theme_color(theme, t, light=0.58)
     line1 = Text()
     if toast:
         line1.append(" ♪ ", style=theme_color(theme, t, light=0.65))
@@ -1549,36 +1534,34 @@ def render_footer(app, width: int, x0: int, y0: int) -> Panel:
                      style=f"bold {theme_color(theme, t, light=0.62)}")
     else:
         x = 1
-        # ---- transport buttons (real clickable buttons, beefy size)
-        line1.append(" ")
-        bface = f"bold {accent}"
-        binv = f"bold black on {accent}"
-        edge = theme_color(theme, t, light=0.38)
-        playing_txt = Text.assemble(("[ ", edge), ("❚❚", bface), (" ]", edge)) \
-            if snap.playing else \
-            Text.assemble(("[ ", edge), ("▶ ", binv), (" ]", edge))
-        line1.append_text(playing_txt)
-        line1.append(" ")
-        app.add_zone(x0 + x, y0, 6, 1, type="btn", action="toggle")
+        # ---- transport buttons (cool filled pills, theme-accented)
+        dim = theme_color(theme, t, light=0.30)          # inactive pill fill
+        hot = theme_color(theme, t, light=0.72)          # active / play fill
+        pill_fg = "bold black"
+
+        def pill(inner, fill, zone, zx, zw):
+            """A solid pill button: [ fill ][ inner ][ fill ], + click zone."""
+            line1.append(" ", style="")
+            line1.append(inner, style=f"{pill_fg} on {fill}")
+            line1.append(" ", style="")
+            app.add_zone(zx, y0, zw, 1, type="btn", action=zone)
+
+        # play / pause — the big filled one
+        if snap.playing:
+            pill("⏸  ❚❚", hot, "toggle", x0 + x, 7)
+        else:
+            pill("▶  ", hot, "toggle", x0 + x, 7)
         x += 7
-        line1.append_text(Text.assemble(("[ ", edge), ("◄◄", bface), (" ]", edge)))
-        line1.append(" ")
-        app.add_zone(x0 + x, y0, 6, 1, type="btn", action="prev")
+        pill("◀◀", dim, "prev", x0 + x, 6)
         x += 7
-        line1.append_text(Text.assemble(("[ ", edge), ("►►", bface), (" ]", edge)))
-        line1.append(" ")
-        app.add_zone(x0 + x, y0, 6, 1, type="btn", action="next")
+        pill("▶▶", dim, "next", x0 + x, 6)
         x += 7
         rep_lbl = {"off": "off", "context": "all", "track": "one"}[snap.repeat]
-        rep_style = bface if snap.repeat != "off" else "grey50"
-        line1.append_text(Text.assemble(("[ ", edge), (f"↻{rep_lbl}", rep_style),
-                                        (" ]", edge)))
-        line1.append(" ")
-        app.add_zone(x0 + x, y0, 8, 1, type="btn", action="repeat")
+        rep_fill = hot if snap.repeat != "off" else dim
+        pill(f"↻ {rep_lbl}", rep_fill, "repeat", x0 + x, 8)
         x += 9
-        sh_style = bface if snap.shuffle else "grey50"
-        line1.append_text(Text.assemble(("[ ", edge), ("⇄ ", sh_style), (" ]", edge)))
-        app.add_zone(x0 + x, y0, 6, 1, type="btn", action="shuffle")
+        sh_fill = hot if snap.shuffle else dim
+        pill("⇄", sh_fill, "shuffle", x0 + x, 6)
         x += 7
         if getattr(app, "sleep_end", None):
             left = max(0, int((app.sleep_end - _time.monotonic()) / 60))
@@ -1588,33 +1571,33 @@ def render_footer(app, width: int, x0: int, y0: int) -> Panel:
 
         # ---- the song title down here, where the eyes live
         W = width - 4               # panel border+padding eats 4 cells
-        vol_w = max(6, min(14, width // 13))
-        vol_block = 7 + vol_w + 5   # "   vol " + bar + " NN%"
         msg_txt = (" · " + truncate(snap.message, 14)) if snap.message else ""
         tr = snap.track
         if tr:
             raw = f"{tr.name} — {tr.artists}"
-            heart_w = 2 if tr.liked else 0
-            name_w = max(8, min(W - x - vol_block - heart_w
-                                - len(msg_txt) - 8, 42))
             line1.append("  ♪ ", style=theme_color(theme, t, light=0.6))
-            line1.append(marquee(raw, name_w, t), style="bold white")
+            line1.append(marquee(raw, 40, t), style="bold white")
             if tr.liked:
                 line1.append(" ♥", style=theme_color(theme, t, phase=0.8, light=0.55))
-            x += 4 + name_w + heart_w
         else:
             line1.append("  · nothing playing - open a list and hit enter",
                          style="grey40")
         if msg_txt:
             line1.append(msg_txt, style="grey42")
-            x += len(msg_txt)
-        # ---- volume bar hugs the right edge
-        vol_x = W - vol_block - 1
-        line1.append(" " * max(1, vol_x - x))
-        line1.append("   vol ", style="grey50")
+        # ---- volume bar hugs the right edge (measured from rendered width so
+        # it's always in sync with whatever the buttons/title consumed)
+        vol_w = max(6, min(14, width // 13))
+        vol_label = "   vol "
+        vol_tail = f" {snap.volume:>3}%"
+        vol_block = len(vol_label) + vol_w + len(vol_tail)
+        cur = len(line1.plain)
+        pad = max(1, W - cur - vol_block)
+        line1.append(" " * pad)
+        line1.append(vol_label, style="grey50")
+        bar_inner = len(line1.plain)          # bar starts here (0-based inner)
         line1.append_text(bar(vol_w, snap.volume / 100.0, theme, t))
-        line1.append(f" {snap.volume:>3}%", style="grey62")
-        app.add_zone(x0 + vol_x + 6, y0, vol_w, 1, type="volume")
+        line1.append(vol_tail, style="grey62")
+        app.add_zone(x0 + bar_inner, y0, vol_w, 1, type="volume")
 
     line2 = Text()
     if app.typing:
@@ -1704,26 +1687,23 @@ def _build_classic(app, width: int, height: int):
 
 
 def _build_revamp(app, width: int, height: int):
-    """The new layout: animated header + bottom tab bar + playlist sidebar."""
+    """The new layout: animated header + playlist sidebar (nav in sidebar),
+    no top tab bar (you have the sidebar - keep the screen clean)."""
     header_h = 4
-    tab_h = 3
     footer_h = 5
-    body_h = height - header_h - tab_h - footer_h
-    # content origins MUST match where panels actually render:
-    # body starts after header + tabbar (panel border + 1 content row)
+    body_h = height - header_h - footer_h
+    # content origins MUST match where panels actually render
     mx0 = NAV_W + 1
-    my0 = header_h + tab_h + 1
-    # footer is pinned to the BOTTOM of the screen, not right after the body
+    my0 = header_h + 1
+    # footer is pinned to the BOTTOM of the screen
     fy0 = height - footer_h + 1
     root = Layout()
     root.split_column(
         Layout(name="header", size=header_h),
-        Layout(name="tabbar", size=tab_h),
         Layout(name="body"),
         Layout(name="footer", size=footer_h),
     )
     root["header"].update(render_header_revamp(app, width))
-    root["tabbar"].update(render_tabbar(app, width, 2, header_h + 1))
     root["footer"].update(render_footer(app, width, 2, fy0))
     main = _render_main(app, width - NAV_W, body_h, mx0, my0)
     root["body"].split_row(
