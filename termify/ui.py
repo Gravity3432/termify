@@ -730,12 +730,13 @@ def render_nav_revamp(app, x0: int, y0: int, height: int) -> Panel:
                     out.append(" " * cover_w, style="")
                 out.append("\n")
         else:
-            # fallback colored tile
+            # fallback colored tile — solid FULL block so there's no gap at
+            # the top (half-blocks left the upper row looking cut off).
             top, low = ("#ff5f87", "#c2244e") if is_liked else _thumb_colors(name)
             out.append(f"{caret} ", style=f"bold {accent}" if sel else "grey30")
             for r in range(cover_h):
-                glyph = "▄" if r < cover_h // 2 else "▀"
                 st = sel_style if sel else (top if r < cover_h // 2 else low)
+                glyph = "█"
                 if r == 0:
                     out.append(glyph * cover_w, style=st)
                     out.append(" ", style="")
@@ -1059,8 +1060,8 @@ def render_playlists(app, width: int, height: int, x0: int, y0: int) -> Panel:
             top, low = _thumb_colors(name)
             art = Text()
             for r in range(cover_h):
-                art.append(("▄" * thumb_w) if r < cover_h // 2
-                           else ("▀" * thumb_w),
+                # solid full block - no top gap (half-blocks looked cut off)
+                art.append("█" * thumb_w,
                            style=top if r < cover_h // 2 else low)
                 art.append("\n")
         return art

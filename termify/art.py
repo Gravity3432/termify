@@ -7,6 +7,8 @@ import random
 import threading
 from typing import Tuple
 
+from PIL import Image
+
 from . import config
 
 _lock = threading.Lock()
@@ -99,7 +101,8 @@ def cover_art_text(url: str, w_chars: int, h_rows: int):
     img = fetch_image(url)
     if img is None:
         return None
-    img = img.resize((w_chars, h_rows * 2))
+    # LANCZOS gives a much sharper downscale than the default (nearest).
+    img = img.resize((w_chars, h_rows * 2), Image.LANCZOS)
     px = img.load()
     text = Text()
     for y in range(0, h_rows * 2, 2):
