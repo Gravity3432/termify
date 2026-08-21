@@ -656,17 +656,30 @@ def render_tabbar(app, width: int, x0: int, y0: int) -> Panel:
 
 
 def render_nav_revamp(app, x0: int, y0: int, height: int) -> Panel:
-    """Left sidebar = your playlists (revamp layout), with tiny cover art."""
+    """Left sidebar = your playlists (revamp layout), as BIG cover cards.
+
+    Each playlist is a tall, comfortable card: a proper cover-art block with
+    the name beside it. One click zone covers the whole card (so clicks are
+    forgiving and the row/zone can't drift out of sync), and every card's
+    zone Y is computed from the same row math that renders it.
+    """
     theme, t = app.theme, app.t()
+    # card geometry
+    cover_h = 3                      # rows tall each cover is
+    cover_w = 12                     # cells wide each cover is
+    card_h = cover_h + 1             # cover + one name/meta line
+    # the zone for playlist card n sits at y0 + HEADER + n*card_h
+    HEADER_ROWS = 2                  # "PLAYLISTS" + divider
+
     out = Text()
     out.append(" PLAYLISTS\n", style=f"bold {theme_color(theme, t, light=0.6)}")
-    out.append("─" * 20 + "\n", style="grey27")
+    out.append("─" * (NAV_W - 4) + "\n", style="grey27")
     rows = app.rows.get("playlists", [])
     if app.loading.get("playlists"):
         out.append(" loading…\n", style=theme_color(theme, t, light=0.55 + 0.2 * math.sin(t * 5)))
     elif not rows:
         out.append(" (none yet)\n", style="grey35")
-    avail = max(2, height - 9)
+    avail = max(1, (height - 8) // card_h)
     sel_pl = max(0, app.sel["playlists"] - 1)
     sc = app.scroll["playlists"]
     if sel_pl < sc:
@@ -677,44 +690,59 @@ def render_nav_revamp(app, x0: int, y0: int, height: int) -> Panel:
     app.scroll["playlists"] = sc
     accent = sel_accent(theme, t)
 
-    def mini_cover_styled(name, is_liked=False):
-        """Return (text, color) for a tiny 2-char cover tile."""
+    def cover_block(name, is_liked=False):
+        """A small cover-art block (top ▄ rows + bottom ▀ rows)."""
         if is_liked:
-            return "♥♥", theme_color(theme, t, light=0.7)
-        top, _low = _thumb_colors(name)
-        return "██", top
-
-    # pinned Liked Songs
-    app.add_zone(x0 + 1, y0 + 2, 20, 1, type="sidebar", index=0)
-    cover_txt, cover_col = mini_cover_styled("Liked Songs", True)
-    if app.sel["playlists"] == 0:
-        out.append(f" ❯ ", style=f"bold black on {accent}")
-        out.append(cover_txt, style=cover_col if False else f"black on {accent}")
-        out.append(" Liked Songs\n", style=f"bold black on {accent}")
-    else:
-        out.append("   ", style="")
-        out.append(cover_txt, style=cover_col)
-        out.append(" Liked Songs\n", style="grey70")
-    for i in range(sc, min(len(rows), sc + avail)):
-        pl = rows[i]
-        view_idx = i + 1
-        app.add_zone(x0 + 1, y0 + 3 + (i - sc), 20, 1,
-                     type="sidebar", index=view_idx)
-        sel = app.sel["playlists"] == view_idx
-        label = truncate(pl.name, 15)
-        cover_txt, cover_col = mini_cover_styled(pl.name)
-        if sel:
-            out.append(f" ❯ ", style=f"bold black on {accent}")
-            out.append(cover_txt, style=f"black on {accent}")
-            out.append(f" {label.ljust(15)}\n", style=f"bold black on {accent}")
+            top, low = "#ff5f87", "#c2244e"
         else:
+            top, low = _thumb_colors(name)
+        lines = []
+        for r in range(cover_h):
+            glyph = "▄" if r < cover_h // 2 else "▀"
+            lines.append((glyph * cover_w, top if r < cover_h // 2 else low))
+        return lines
+
+    def card(row_off, view_idx, name, is_liked=False):
+        """Emit one playlist card + its click zone. Returns lines appended."""
+        sel = app.sel["playlists"] == view_idx
+        sel_style = f"bold black on {accent}" if sel else ""
+        # click zone covers the WHOLE card
+        zone_y = y0 + HEADER_ROWS + row_off * card_h
+        app.add_zone(x0 + 1, zone_y, NAV_W - 2, card_h,
+                     type="sidebar", index=view_idx)
+        cover = cover_block(name, is_liked)
+        name_w = max(8, NAV_W - 6 - cover_w)
+        caret = "❯" if sel else " "
+        # line 0: caret + cover-top + name
+        out.append(f"{caret} ", style=f"bold {accent}" if sel else "grey30")
+        out.append(cover[0][0], style=sel_style if sel else cover[0][1])
+        out.append(" ", style="")
+        if sel:
+            out.append(truncate(name, name_w).ljust(name_w), style=sel_style)
+        else:
+            out.append(truncate(name, name_w), style="bold white")
+        out.append("\n")
+        # middle cover rows (2..cover_h-1)
+        for r in range(1, cover_h):
             out.append("   ", style="")
-            out.append(cover_txt, style=cover_col)
-            out.append(f" {label.ljust(15)}\n", style="grey70")
-    if len(rows) > sc + avail:
-        out.append(f"   …{len(rows) - sc - avail} more\n", style="grey35")
+            out.append(cover[r][0], style=sel_style if sel else cover[r][1])
+            out.append("\n")
+        # meta line (part of the card height, keeps spacing even)
+        meta = "Liked Songs ♥" if is_liked else f"{len(rows)} pl"
+        out.append("   ", style="")
+        out.append(meta.ljust(NAV_W - 6), style="grey40" if not sel else sel_style)
+        out.append("\n")
+
+    # pinned Liked Songs = card 0
+    card(0, 0, "Liked Songs", is_liked=True)
+    # playlists
+    for i in range(sc, min(len(rows), sc + avail - 1)):
+        pl = rows[i]
+        card(i - sc + 1, i + 1, pl.name)
+    if len(rows) > sc + avail - 1:
+        out.append(f"   …{len(rows) - (sc + avail - 1)} more\n", style="grey35")
     out.append("\n")
-    dev = truncate(app.snap.device_label, 18)
+    dev = truncate(app.snap.device_label, NAV_W - 6)
     if dev:
         out.append("♪ " + dev + "\n", style=theme_color(theme, t, light=0.5))
     out.append("[enter] open · [a] play\n", style="grey35")
@@ -1542,7 +1570,7 @@ def render_footer(app, width: int, x0: int, y0: int) -> Panel:
 
 # ------------------------------------------------------------------ root
 
-NAV_W = 24
+NAV_W = 36
 
 
 def build(app, width: int, height: int):
