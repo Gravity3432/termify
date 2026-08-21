@@ -656,18 +656,18 @@ def render_tabbar(app, width: int, x0: int, y0: int) -> Panel:
 
 
 def render_nav_revamp(app, x0: int, y0: int, height: int) -> Panel:
-    """Left sidebar = your playlists (revamp layout), as BIG cover cards.
+    """Left sidebar = your playlists (revamp layout), as compact cover cards.
 
-    Each playlist is a tall, comfortable card: a proper cover-art block with
-    the name beside it. One click zone covers the whole card (so clicks are
-    forgiving and the row/zone can't drift out of sync), and every card's
-    zone Y is computed from the same row math that renders it.
+    Each playlist is a tidy 3-row card: a real cover thumbnail with the name
+    and a meta line. One click zone covers the whole card (forgiving, can't
+    drift), and every card's zone Y is computed from the same row math that
+    renders it. Mouse-wheel over the sidebar scrolls the list.
     """
     theme, t = app.theme, app.t()
     # card geometry
-    cover_h = 3                      # rows tall each cover is
+    cover_h = 2                      # rows tall each cover is
     cover_w = 12                     # cells wide each cover is
-    card_h = cover_h + 1             # cover + one name/meta line
+    card_h = cover_h + 1             # cover rows + one meta line
     # the zone for playlist card n sits at y0 + HEADER + n*card_h
     HEADER_ROWS = 2                  # "PLAYLISTS" + divider
 

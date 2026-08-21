@@ -458,7 +458,10 @@ class App:
         if wheel:
             up = not (code & 1)  # 64 up / 65 down - smooth 1-row glides now
             z = self._find_zone(x, y)
-            if z and z.get("type") == "volume":
+            # wheeling over the left sidebar scrolls the PLAYLIST list there
+            if x < ui.NAV_W + 1 and (z is None or z.get("type") == "sidebar"):
+                self._scroll_sidebar(-1 if up else 1)
+            elif z and z.get("type") == "volume":
                 self._vol(3 if up else -3)
             elif self.picker is not None:
                 rows = self.rows.get("playlists", [])
@@ -584,6 +587,14 @@ class App:
             self.action_enter()  # double-click = play / open
         else:
             self._last_click = (view, idx, now)
+
+    def _scroll_sidebar(self, delta: int) -> None:
+        """Scroll the sidebar playlist list up/down (wheel over the sidebar)."""
+        rows = self.rows.get("playlists", [])
+        total = len(rows) + 1  # + pinned Liked Songs
+        cur = self.sel["playlists"]
+        self.sel["playlists"] = max(0, min(total - 1, cur + delta))
+        self.clamp_sel("playlists")
 
     def _sidebar_click(self, index: int) -> None:
         """Click a playlist in the left sidebar → open it (0 = Liked Songs)."""
