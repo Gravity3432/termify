@@ -91,7 +91,7 @@ class App:
         self.theme = cfg.get("theme", "aurora")
         self.layout = cfg.get("layout", "revamp")  # "revamp" | "classic"
         self._t0 = time.monotonic()
-        self.boot_until = self._t0 + 4.2  # JTMB splash; any key cuts it short
+        self.boot_until = self._t0 + 6.0  # JTMB splash; plays out fully first
 
         self.view = "home"
         self.help_visible = False
@@ -119,8 +119,11 @@ class App:
         self.input = InputReader()
         self.mouse_debug = False
         self._last_mouse: tuple = (0, 0, 0, "")
-        self.mouse_y_offset = int(cfg.get("mouse_y_offset", 0))
-        self.mouse_y_scale = float(cfg.get("mouse_y_scale", 1.0))
+        # identity by default; stale saved values are ignored (the sidebar is
+        # now big forgiving cards, so no Y correction is needed and any residual
+        # scale/offset would corrupt precise clicks like the seek bar).
+        self.mouse_y_offset = 0
+        self.mouse_y_scale = 1.0
         self._cover_img = None       # a real cover being shown full-screen
         self._cover_title = ""
 
@@ -440,18 +443,14 @@ class App:
     def _find_zone(self, x: int, y: int, tol: int = 3):
         """Resolve a click to the row the user actually pointed at.
 
-        Applies two corrections for terminal coordinate quirks:
-          mouse_y_scale — scales Y (for a drift that grows the further down
-                          the screen you click; Windows console quirk),
-          mouse_y_offset — a constant shift on top.
+        No scaling/shifting by default - the sidebar cards are big forgiving
+        targets now, and residual corrections only corrupted precise clicks.
         """
-        cy = y * self.mouse_y_scale + self.mouse_y_offset
-        return self.find_zone(x, int(round(cy)), tol)
+        return self.find_zone(x, y, tol)
 
     def on_mouse(self, code: int, x: int, y: int, pressed: bool) -> None:
         if self.boot_active():
-            self.boot_skip()
-            return
+            return  # let the splash play out fully first
         z_seen = self._find_zone(x, y)
         self._last_mouse = (code, x, y, z_seen["type"] if z_seen else "miss")
         self._last_mouse_t = time.monotonic()
@@ -636,7 +635,7 @@ class App:
             return
         idx = self.sort_idx[kind] % len(SORT_MODES)
         entry = SORT_MODES[idx]
-        name, key = entry[0], entry[1]
+        _, key = entry[0], entry[1]
         rev = entry[2] if len(entry) > 2 else False
         if key is None:
             self.rows[kind] = list(orig)
@@ -683,8 +682,7 @@ class App:
         if self._stop.is_set():
             return
         if self.boot_active():
-            self.boot_skip()  # any key during the splash cuts straight to it
-            return
+            return  # let the splash play out fully first
         if self.mouse_debug:
             self._last_key = repr(ch)
             self._last_key_t = time.monotonic()
@@ -1087,7 +1085,6 @@ class App:
         back to opening the real image in the OS default viewer (guaranteed
         crisp on Windows).
         """
-        import io as _io
         url = None
         title = ""
         tr = self.snap.track

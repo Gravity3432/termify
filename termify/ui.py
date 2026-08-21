@@ -121,7 +121,8 @@ def render_splash(app, width: int, height: int, t: Optional[float] = None) -> Pa
     t = app.boot_t() if t is None else t
     W = max(40, width - 4)
     H = max(16, height - 4)
-    art = SPLASH_ART_BLOODY if theme == "vampire" else SPLASH_ART
+    # always the dripping-blood vampiric font for the boot animation
+    art = SPLASH_ART_BLOODY
     art = [l.ljust(max(len(x) for x in art)) for l in art]
     art_h, art_w = len(art), len(art[0])
     tick = int(t * 12)
@@ -160,15 +161,22 @@ def render_splash(app, width: int, height: int, t: Optional[float] = None) -> Pa
             x = x0 + lx
             if ch == " " or x >= W:
                 continue
-            birth = 0.15 + 1.5 * (lx / art_w) + _cheap_hash(lx, ly) % 40 / 100.0
+            # smoother, slower reveal: birth sweeps across left->right, then a
+            # gentle dim-to-bright ramp instead of a hard switch.
+            birth = 0.25 + 1.8 * (lx / art_w) + _cheap_hash(lx, ly) % 40 / 100.0
             fade = t - birth
             if fade < 0:
                 row[x] = [" ", ""]
-            elif fade < 0.45:
+            elif fade < 0.7:
+                # glitch scramble that eases out (longer, smoother transition)
                 g = SPLASH_GLYPHS[_cheap_hash(lx, ly, tick) % len(SPLASH_GLYPHS)]
-                row[x] = [g, theme_color(theme, t, phase=lx * 0.1, light=0.55)]
+                light = 0.30 + 0.35 * (fade / 0.7)
+                row[x] = [g, theme_color(theme, t, phase=lx * 0.1, light=light)]
             else:
-                light = 0.78 if fade < 0.8 else 0.66 - 0.09 * math.sin(t * 2.2)
+                # fade the real letter in over a full second, breathing gently
+                p = min(1.0, (fade - 0.7) / 1.0)
+                light = 0.55 + 0.30 * p - 0.06 * math.sin(t * 2.2)
+                light = max(0.0, min(1.0, light))
                 row[x] = [ch, theme_color(theme, t, phase=lx * 0.09,
                                           light=light, sat=0.88)]
 
@@ -425,6 +433,47 @@ def track_row(track: Track, idx: int, selected: bool, width: int,
             out.append(album_part, style="grey42")
             out.append(" ", style="")
         out.append(dur, style="grey58")
+    return out
+
+
+def track_row_art(track: Track, idx: int, selected: bool, width: int,
+                  theme: str, t: float, art_lines, thumb_w: int,
+                  cover_h: int, date_col: bool = False) -> Text:
+    """A BIG track row: a square album-art thumbnail on the left with the
+    title / artist / album / duration beside it. Returns a multi-line Text
+    of height `cover_h`. The whole card is one click zone."""
+    caret = "❯" if selected else " "
+    heart = "♥" if track.liked else "♡"
+    dur = track.duration_text
+    accent = theme_color(theme, t, light=0.55)
+    sel_style = f"bold black on {accent}" if selected else ""
+    out = Text()
+    meta = track.date_text if date_col else track.album
+    name_w = max(10, width - thumb_w - 6)
+    pad = " " * (len(caret) + 1)
+
+    text_rows = [
+        (track.name, "bold white" if not selected else "", True),
+        (track.artists, "white" if not selected else "", False),
+        (meta, "grey62" if not selected else "", False),
+        (f"{dur}   {heart}", "grey58" if not selected else "", False),
+    ]
+    for r in range(cover_h):
+        out.append(f"{caret} " if r == 0 else pad,
+                   style=f"bold {accent}" if (selected and r == 0) else "grey30")
+        if art_lines and r < len(art_lines):
+            out.append_text(art_lines[r])
+        else:
+            out.append(" " * thumb_w, style="")
+        out.append("  ", style="")
+        if r < len(text_rows):
+            txt, base, is_title = text_rows[r]
+            if selected:
+                out.append(truncate(txt, name_w).ljust(name_w), style=sel_style)
+            else:
+                st = ("bold " + accent) if is_title and track.liked else base
+                out.append(truncate(txt, name_w), style=st)
+        out.append("\n")
     return out
 
 
@@ -850,7 +899,9 @@ def render_home(app, width: int, height: int, x0: int, y0: int) -> Panel:
     prog_row = top_h + 1
     # cover the bar row AND the timing row below it, so clicking the visible
     # "click bar to seek" prompt works (not just the thin bar itself).
-    app.add_zone(x0, y0 + prog_row, inner_w, 2, type="seek")
+    # Content starts one row/col inside the panel border, so the zone origin
+    # is (x0+1, y0+1+prog_row).
+    app.add_zone(x0 + 1, y0 + 1 + prog_row, inner_w, 2, type="seek")
     timing = Text()
     pre = f" {snap.position_text} "
     post = f"{snap.duration_text} "
@@ -920,7 +971,11 @@ def render_track_list(app, kind: str, title: str,
                       tracks: List[Track], width: int, height: int,
                       x0: int, y0: int) -> Panel:
     theme, t = app.theme, app.t()
-    rows_avail = max(3, height - 5)
+    # BIG track cards: square thumbnail + title/artist/album/duration
+    thumb_w = 12
+    cover_h = 5
+    row_h = cover_h
+    rows_avail = max(1, (height - 6) // row_h)
     scroll = window(app, kind, rows_avail, len(tracks))
     sel = app.sel[kind]
     sort = app.sort_label(kind)
@@ -934,12 +989,22 @@ def render_track_list(app, kind: str, title: str,
         out.append(" (empty)\n", style="grey42")
     by_date = app.sort_label(kind) in ("oldest added", "newest added")
     for i in range(scroll, min(len(tracks), scroll + rows_avail)):
-        app.add_zone(x0, y0 + 2 + (i - scroll), width - 2, 1,
+        tr = tracks[i]
+        row_y = y0 + 2 + (i - scroll) * row_h
+        app.add_zone(x0 + 1, row_y, width - 2, row_h,
                      type="select", view=kind, index=i)
+        art_lines = None
+        if tr.image_url:
+            try:
+                art = app.art_for(tr.image_url, thumb_w, cover_h)
+                if art is not None and art.plain.strip():
+                    art_lines = art.split("\n")
+            except Exception:
+                art_lines = None
         out.append_text(
-            track_row(tracks[i], i, i == sel, width - 4, theme, t, by_date)
+            track_row_art(tr, i, i == sel, width - 4, theme, t,
+                          art_lines, thumb_w, cover_h, by_date)
         )
-        out.append("\n")
     return Panel(out, box=box.ROUNDED, border_style=theme_color(theme, t, light=0.40))
 
 
@@ -1549,7 +1614,7 @@ def render_footer(app, width: int, x0: int, y0: int) -> Panel:
         line1.append("   vol ", style="grey50")
         line1.append_text(bar(vol_w, snap.volume / 100.0, theme, t))
         line1.append(f" {snap.volume:>3}%", style="grey62")
-        app.add_zone(x0 + vol_x + 7, y0, vol_w, 1, type="volume")
+        app.add_zone(x0 + vol_x + 6, y0, vol_w, 1, type="volume")
 
     line2 = Text()
     if app.typing:
