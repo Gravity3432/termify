@@ -25,7 +25,8 @@ DEV_FILES = [
     "termify.spec", "entry.py", "pyproject.toml",
     "requirements.txt", "CONTRIBUTING.md",
     "test_errors.py", "test_features2.py", "test_fix.py",
-    "test_media2.py", "test_media_lyrics.py", "make_release.py",
+    "test_media2.py", "test_media_lyrics.py", "test_mouse.py",
+    "make_release.py",
 ]
 
 

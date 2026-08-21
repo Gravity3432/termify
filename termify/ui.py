@@ -1380,7 +1380,7 @@ def render_stats(app, width: int, height: int) -> Panel:
 
 HELP_LINES = [
     ("views",   "1…7 / tab / ↑↓ j/k + enter  (or click them)"),
-    ("mouse",   "click seek bar to scrub · click volume · click rows/nav · wheel scrolls · right-click a track = add to playlist"),
+    ("mouse",   "click seek bar to scrub · click volume · click rows/nav · wheel scrolls · right-click a track = add to playlist · if clicks land on the wrong row, press ; (nudge +1) or ' (nudge −1) to fix it"),
     ("play",    "space = pause/resume · n next · b prev · ←/→ seek 5 s · ,/. seek 30 s"),
     ("volume",  "+ / − (5 % steps) · click/drag the footer bar"),
     ("modes",   "s shuffle · r repeat off→all→one"),

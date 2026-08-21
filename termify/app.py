@@ -118,6 +118,7 @@ class App:
         self.input = InputReader()
         self.mouse_debug = False
         self._last_mouse: tuple = (0, 0, 0, "")
+        self.mouse_y_offset = int(cfg.get("mouse_y_offset", 0))
 
         # lyrics / picker / sleep timer / session resume / stats
         self.show_stats = False
@@ -385,23 +386,33 @@ class App:
             self.zones.append({"x": x, "y": y, "w": w, "h": h, **action})
 
     def find_zone(self, x: int, y: int, tol: int = 3):
-        """Return the zone under (x, y). If none matches exactly, snap to the
-        nearest zone in the same column within `tol` rows - this absorbs the
-        small vertical coordinate offset some terminals (Windows) introduce,
-        so a click lands on the row you actually pointed at, not one above."""
-        for z in reversed(self.zones):
-            if z["x"] <= x < z["x"] + z["w"] and z["y"] <= y < z["y"] + z["h"]:
-                return z
-        if tol:
-            best = None
-            best_d = tol + 1
-            for z in self.zones:
-                if z["x"] <= x < z["x"] + z["w"]:
-                    d = abs(z["y"] - y)
-                    if d <= tol and d < best_d:
-                        best, best_d = z, d
-            if best is not None:
-                return best
+        """Return the zone under (x, y).
+
+        Prefers the zone whose band actually *contains* the click, then snaps
+        to the nearest row band within `tol`. Because list rows sit 1 row
+        apart (no gaps), a click always lands inside exactly one row - so the
+        containment match is the source of truth, and the `mouse_y_offset`
+        correction (see _find_zone) is what absorbs a terminal's constant
+        "one row off" reporting. The tol snap only helps when rows are spaced
+        or a control sits near a boundary.
+        """
+        best = None
+        best_score = (tol + 1, 1)  # (distance, not_containing)
+        for z in self.zones:
+            if not (z["x"] <= x < z["x"] + z["w"]):
+                continue
+            inside = z["y"] <= y < z["y"] + z["h"]
+            if inside:
+                d = 0
+                containing = 0
+            else:
+                d = min(abs(z["y"] - y), abs(z["y"] + z["h"] - y))
+                containing = 1
+            score = (d, containing)
+            if score < best_score:
+                best, best_score = z, score
+        if best is not None and best_score[0] <= tol:
+            return best
         return None
 
     def _input_loop(self) -> None:
@@ -422,11 +433,16 @@ class App:
                 self.toast(f"error: {exc}")
 
     # -- mouse ----------------------------------------------------------
+    def _find_zone(self, x: int, y: int, tol: int = 3):
+        """find_zone with the terminal's vertical offset applied, so a click
+        that reports N rows off still resolves to the row the user pointed at."""
+        return self.find_zone(x, y + self.mouse_y_offset, tol)
+
     def on_mouse(self, code: int, x: int, y: int, pressed: bool) -> None:
         if self.boot_active():
             self.boot_skip()
             return
-        z_seen = self.find_zone(x, y)
+        z_seen = self._find_zone(x, y)
         self._last_mouse = (code, x, y, z_seen["type"] if z_seen else "miss")
         self._last_mouse_t = time.monotonic()
         motion = bool(code & 32)
@@ -434,7 +450,7 @@ class App:
         btn = code & 3
         if wheel:
             up = not (code & 1)  # 64 up / 65 down - smooth 1-row glides now
-            z = self.find_zone(x, y)
+            z = self._find_zone(x, y)
             if z and z.get("type") == "volume":
                 self._vol(3 if up else -3)
             elif self.picker is not None:
@@ -445,7 +461,7 @@ class App:
                 self._move(-1 if up else 1)
             return
         if pressed and btn == 2:  # RIGHT click = add-that-song-to-a-playlist
-            self._right_click(self.find_zone(x, y))
+            self._right_click(self._find_zone(x, y))
             return
         if motion and self._drag_zone is not None:
             if time.monotonic() - self._drag_last < 0.08:
@@ -458,7 +474,7 @@ class App:
                 self._seek_at(z, x)
             return
         if pressed and btn == 0:
-            z = self.find_zone(x, y)
+            z = self._find_zone(x, y)
             if z is None:
                 return
             kind = z.get("type")
@@ -750,6 +766,18 @@ class App:
                 self.toast("mouse diagnostics on - WARNING: mouse reporting inactive (terminal may not support it)", 6)
             else:
                 self.toast(f"mouse diagnostics: {state}")
+            return
+        if ch == ";":
+            # nudge mouse vertical offset +1 (if clicks hit one row too low)
+            self.mouse_y_offset += 1
+            self.cfg["mouse_y_offset"] = self.mouse_y_offset
+            self.toast(f"mouse y offset {self.mouse_y_offset:+d}  (to go back, press ' )")
+            return
+        if ch == "'":
+            # nudge mouse vertical offset -1 (if clicks hit one row too high)
+            self.mouse_y_offset -= 1
+            self.cfg["mouse_y_offset"] = self.mouse_y_offset
+            self.toast(f"mouse y offset {self.mouse_y_offset:+d}  (to go forward, press ; )")
             return
         if ch == "t":
             self.cycle_theme()

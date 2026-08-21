@@ -32,6 +32,7 @@ DEFAULTS: Dict[str, Any] = {
     "mode": "auto",             # auto | stream | remote
     "image_size": 300,
     "prebuffer_ms": 250,        # start-of-track cushion (can't be 0 - physics)
+    "mouse_y_offset": 0,        # +N = clicks land N rows too high (Windows quirk); nudge to 1/-1 as needed
 }
 
 ORDERED_THEMES = [
